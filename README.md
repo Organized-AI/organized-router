@@ -77,6 +77,13 @@ share = max(0, saved) x 0.05
 
 Self-hosters pay neither. That is not a loophole, it is the design. Full detail in [DOCUMENTATION/PRICING.md](DOCUMENTATION/PRICING.md).
 
+## Extras
+
+The provider error fixture corpus, a catalog snapshot you can import straight into KV, and
+`receipt.py` (the local token-receipt miner) are bundled behind an email wall. The code is
+public and always will be; the bundle just saves you the work of regenerating it. See
+[DOCUMENTATION/DISTRIBUTION.md](DOCUMENTATION/DISTRIBUTION.md).
+
 ## Stack
 
 Cloudflare Workers, Workers Assets, D1, KV, Durable Objects, Queues, R2. No Cloudflare Pages.
