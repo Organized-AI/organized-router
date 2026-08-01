@@ -1,0 +1,20 @@
+{
+  "name": "organized-router",
+  "version": "0.1.0",
+  "private": false,
+  "license": "MIT",
+  "description": "LLM gateway that repairs broken requests before fallback, with savings-accounted routing.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.90.0"
+  }
+}

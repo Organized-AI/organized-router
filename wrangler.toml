@@ -1,0 +1,61 @@
+name = "organized-router"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+account_id = "${CF_ACCOUNT_ID}"
+
+# Static surfaces are served as Workers Assets. Never Cloudflare Pages.
+[assets]
+directory = "./assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "organized-router-db"
+database_id = "${D1_DATABASE_ID}"
+
+[[kv_namespaces]]
+binding = "PATCH_CATALOG"
+id = "${KV_PATCH_CATALOG_ID}"
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "${KV_USERS_ID}"
+
+[[durable_objects.bindings]]
+name = "HEALER_BREAKER"
+class_name = "HealerBreaker"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HealerBreaker"]
+
+[[queues.producers]]
+binding = "METER_FLUSH"
+queue = "meter-flush"
+
+[[queues.consumers]]
+queue = "meter-flush"
+max_batch_size = 50
+
+[[r2_buckets]]
+binding = "BODY_ARCHIVE"
+bucket_name = "organized-router-bodies"
+
+[vars]
+FIX_ENABLED = "true"
+FIX_ROLLOUT = "everyone"
+FIX_REPAIRABLE_STATUSES = "400,404,422"
+FIX_TIMEOUT_MS = "10000"
+FIX_MAX_PATCH_BYTES = "32768"
+FIX_BREAKER_THRESHOLD = "3"
+FIX_BREAKER_COOLDOWN_MS = "30000"
+HEALER_URL = "https://fix.organizedai.vip"
+HEALER_MODEL = "claude-haiku-4-5-20251001"
+SAVINGS_SHARE = "0.05"
+
+# Secrets via `wrangler secret put`, never here:
+# ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY
+# STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET
+# HEALER_API_KEY GATE_ADMIN_KEY
