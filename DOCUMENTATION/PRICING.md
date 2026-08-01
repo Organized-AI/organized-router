@@ -71,7 +71,7 @@ Account `acct_XXXXXXXXXXXXXXXX`.
 
 | Object | Purpose |
 |---|---|
-| Product: Organized Router | $50/month recurring, created by GitPaywall |
+| Product: Organized Router | $50/month recurring, created directly on Stripe |
 | Meter: `organized_router_savings_share` | usage-based, unit = USD cents of share |
 | Queue: `meter-flush` | buffers meter events out of the request path |
 
