@@ -1,65 +1,89 @@
 #!/usr/bin/env bash
-# Organized Router billing setup.
-# Creates the savings-share meter and a metered price bound to it, on the SAME product
-# as the $50 subscription so both land on one invoice.
+# Organized Router billing setup - version-agnostic.
 #
-# Requires: stripe CLI, authenticated against the Organized AI account.
-# Run with TEST=1 to operate in test mode first. Do that.
+# Uses `stripe post` raw API passthrough rather than the `stripe billing meters`
+# subcommand. The sugar subcommands change shape between CLI releases; the raw
+# endpoint does not. This script works on any CLI new enough to have `stripe post`.
+#
+# Requires: stripe CLI (authenticated), jq.
+# ALWAYS run with TEST=1 first. A meter with a wrong value_settings key is not
+# cleanly deletable.
 
 set -euo pipefail
 
 PRODUCT_ID="${PRODUCT_ID:?set PRODUCT_ID to the Organized Router product id}"
-MODE_FLAG=""
-[ "${TEST:-0}" = "1" ] && MODE_FLAG="--api-key ${STRIPE_TEST_KEY:?set STRIPE_TEST_KEY when TEST=1}"
+EVENT_NAME="${EVENT_NAME:-organized_router_savings_share}"
 
-echo "==> 1. Create the savings-share meter"
-METER_JSON=$(stripe billing meters create $MODE_FLAG \
-  --display-name "Savings Share" \
-  --event-name "organized_router_savings_share" \
-  -d "default_aggregation[formula]=sum" \
-  -d "value_settings[event_payload_key]=value" \
-  -d "customer_mapping[type]=by_id" \
-  -d "customer_mapping[event_payload_key]=stripe_customer_id")
-METER_ID=$(echo "$METER_JSON" | jq -r '.id')
-echo "    meter: $METER_ID"
+ARGS=()
+if [ "${TEST:-0}" = "1" ]; then
+  ARGS+=(--api-key "${STRIPE_TEST_KEY:?set STRIPE_TEST_KEY when TEST=1}")
+  echo "MODE: test"
+else
+  echo "MODE: LIVE. Ctrl-C now if that is not what you meant."; sleep 3
+fi
 
-echo "==> 2. Create the metered price bound to that meter"
-# The Worker emits the SAVINGS in cents as the meter value.
-# unit_amount_decimal 0.05 charges 0.05 cents per cent saved = exactly 5%.
-# The invoice line quantity is then the raw savings in cents, which is the auditable number.
-PRICE_JSON=$(stripe prices create $MODE_FLAG \
-  --product "$PRODUCT_ID" \
-  --currency usd \
-  --nickname "Savings share 5%" \
-  --billing-scheme per_unit \
+api() { stripe "$@" "${ARGS[@]}"; }
+
+echo "==> 0. Preflight"
+command -v jq >/dev/null || { echo "jq required"; exit 1; }
+stripe version >/dev/null || { echo "stripe CLI required"; exit 1; }
+api get /v1/products/"$PRODUCT_ID" >/dev/null || { echo "product $PRODUCT_ID not found in this mode"; exit 1; }
+
+echo "==> 1. Meter (idempotent on event_name)"
+EXISTING=$(api get /v1/billing/meters -d limit=100 \
+  | jq -r --arg e "$EVENT_NAME" '.data[] | select(.event_name==$e and .status=="active") | .id' | head -1)
+
+if [ -n "$EXISTING" ]; then
+  METER_ID="$EXISTING"
+  echo "    reusing: $METER_ID"
+else
+  METER_ID=$(api post /v1/billing/meters \
+    -d "display_name=Savings Share" \
+    -d "event_name=$EVENT_NAME" \
+    -d "default_aggregation[formula]=sum" \
+    -d "value_settings[event_payload_key]=value" \
+    -d "customer_mapping[type]=by_id" \
+    -d "customer_mapping[event_payload_key]=stripe_customer_id" | jq -r '.id')
+  echo "    created: $METER_ID"
+fi
+[ -n "$METER_ID" ] && [ "$METER_ID" != "null" ] || { echo "meter creation failed"; exit 1; }
+
+echo "==> 2. Metered price bound to the meter"
+# Worker emits SAVINGS IN CENTS as the meter value.
+# 0.05 cents per cent saved = exactly 5%. Invoice quantity is the auditable number.
+SHARE_PRICE_ID=$(api post /v1/prices \
+  -d "product=$PRODUCT_ID" \
+  -d "currency=usd" \
+  -d "nickname=Savings share 5%" \
+  -d "billing_scheme=per_unit" \
   -d "unit_amount_decimal=0.05" \
   -d "recurring[interval]=month" \
   -d "recurring[usage_type]=metered" \
-  -d "recurring[meter]=$METER_ID")
-SHARE_PRICE_ID=$(echo "$PRICE_JSON" | jq -r '.id')
-echo "    price: $SHARE_PRICE_ID"
+  -d "recurring[meter]=$METER_ID" | jq -r '.id')
+echo "    created: $SHARE_PRICE_ID"
 
-echo
-echo "==> Done. Record these:"
-echo "    STRIPE_PRODUCT_ID=$PRODUCT_ID"
-echo "    STRIPE_METER_ID=$METER_ID"
-echo "    STRIPE_SHARE_PRICE_ID=$SHARE_PRICE_ID"
-echo
-echo "==> 3. A subscription carrying BOTH lines on one invoice:"
-cat <<CMD
+echo "==> 3. Verify"
+api get /v1/prices/"$SHARE_PRICE_ID" | jq '{id, unit_amount_decimal, recurring}'
 
-stripe subscriptions create \\
-  --customer cus_XXXX \\
-  -d "items[0][price]=<the \$50 monthly price id>" \\
-  -d "items[1][price]=$SHARE_PRICE_ID"
+cat <<SUMMARY
 
-CMD
-echo "==> 4. Report a savings event (value is savings in CENTS, not dollars):"
-cat <<CMD
+Record these:
+  STRIPE_PRODUCT_ID=$PRODUCT_ID
+  STRIPE_METER_ID=$METER_ID
+  STRIPE_SHARE_PRICE_ID=$SHARE_PRICE_ID
 
-stripe billing meter-events create \\
-  --event-name organized_router_savings_share \\
-  -d "payload[stripe_customer_id]=cus_XXXX" \\
-  -d "payload[value]=40000"     # \$400.00 saved -> \$20.00 share
+One subscription, both lines, one invoice:
+  stripe post /v1/subscriptions ${ARGS[*]:-} \\
+    -d "customer=cus_XXXX" \\
+    -d "items[0][price]=<the \$50 monthly price id>" \\
+    -d "items[1][price]=$SHARE_PRICE_ID"
 
-CMD
+Report savings (value in CENTS SAVED, not dollars, not the share):
+  stripe post /v1/billing/meter_events ${ARGS[*]:-} \\
+    -d "event_name=$EVENT_NAME" \\
+    -d "payload[stripe_customer_id]=cus_XXXX" \\
+    -d "payload[value]=40000"      # \$400.00 saved -> \$20.00 share
+
+Confirm the arithmetic before going live:
+  stripe get /v1/invoices/upcoming ${ARGS[*]:-} -d customer=cus_XXXX
+SUMMARY

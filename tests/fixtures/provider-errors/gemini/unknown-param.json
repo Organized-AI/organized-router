@@ -1,0 +1,38 @@
+{
+  "provider": "gemini",
+  "status": 400,
+  "request_body": {
+    "model": "gemini-2.0-flash",
+    "frequency_penalty_x": 1,
+    "messages": [
+      {
+        "role": "user",
+        "content": "ping"
+      }
+    ]
+  },
+  "error_body": [
+    {
+      "error": {
+        "code": 400,
+        "message": "Invalid JSON payload received. Unknown name \"frequency_penalty_x\": Cannot find field.",
+        "status": "INVALID_ARGUMENT",
+        "details": [
+          {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            "fieldViolations": [
+              {
+                "description": "Invalid JSON payload received. Unknown name \"frequency_penalty_x\": Cannot find field."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

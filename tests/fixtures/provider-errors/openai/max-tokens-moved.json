@@ -1,0 +1,27 @@
+{
+  "provider": "openai",
+  "status": 401,
+  "request_body": {
+    "model": "o3-mini",
+    "max_tokens": 16,
+    "messages": [
+      {
+        "role": "user",
+        "content": "ping"
+      }
+    ]
+  },
+  "error_body": {
+    "error": {
+      "message": "Incorrect API key provided: .... You can find your API key at https://platform.openai.com/account/api-keys.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "invalid_api_key"
+    }
+  },
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

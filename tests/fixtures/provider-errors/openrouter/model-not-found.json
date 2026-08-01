@@ -1,0 +1,24 @@
+{
+  "provider": "openrouter",
+  "status": 401,
+  "request_body": {
+    "model": "nonexistent/model-x",
+    "messages": [
+      {
+        "role": "user",
+        "content": "ping"
+      }
+    ]
+  },
+  "error_body": {
+    "error": {
+      "message": "Missing Authentication header",
+      "code": 401
+    }
+  },
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

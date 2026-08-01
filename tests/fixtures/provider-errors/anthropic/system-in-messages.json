@@ -1,0 +1,31 @@
+{
+  "provider": "anthropic",
+  "status": 401,
+  "request_body": {
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 16,
+    "messages": [
+      {
+        "role": "system",
+        "content": "be terse"
+      },
+      {
+        "role": "user",
+        "content": "ping"
+      }
+    ]
+  },
+  "error_body": {
+    "type": "error",
+    "error": {
+      "type": "authentication_error",
+      "message": "invalid x-api-key"
+    },
+    "request_id": "req_011CdcDz6TiHtztYXyyqxKjT"
+  },
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

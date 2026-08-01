@@ -1,0 +1,18 @@
+{
+  "provider": "openrouter",
+  "status": 401,
+  "request_body": {
+    "model": "openai/gpt-4o-mini"
+  },
+  "error_body": {
+    "error": {
+      "message": "Missing Authentication header",
+      "code": 401
+    }
+  },
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

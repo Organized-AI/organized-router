@@ -1,0 +1,21 @@
+{
+  "provider": "gemini",
+  "status": 400,
+  "request_body": {
+    "model": "gemini-2.0-flash"
+  },
+  "error_body": [
+    {
+      "error": {
+        "code": 400,
+        "message": "Please pass a valid API key",
+        "status": "INVALID_ARGUMENT"
+      }
+    }
+  ],
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}

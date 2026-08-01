@@ -1,0 +1,27 @@
+{
+  "provider": "gemini",
+  "status": 400,
+  "request_body": {
+    "model": "gemini-99-pro",
+    "messages": [
+      {
+        "role": "user",
+        "content": "ping"
+      }
+    ]
+  },
+  "error_body": [
+    {
+      "error": {
+        "code": 400,
+        "message": "Please pass a valid API key",
+        "status": "INVALID_ARGUMENT"
+      }
+    }
+  ],
+  "expect": {
+    "ofCode": "TODO",
+    "param": "TODO",
+    "repairable": true
+  }
+}
