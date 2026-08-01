@@ -3,7 +3,7 @@
 **Runtime:** Cloudflare Workers, Workers Assets, D1, KV, Durable Objects, Queues, R2
 **Account:** ${CF_ACCOUNT_ID} | **Zone:** ${CF_ZONE_ID}
 **Stripe:** acct_XXXXXXXXXXXXXXXX
-**Billing:** $50/month via GitPaywall + 5% of verified savings. See DOCUMENTATION/PRICING.md
+**Billing:** MIT source, free to self-host. Hosted at $50/month plus 5% of verified savings, billed on Stripe. See DOCUMENTATION/PRICING.md
 
 ---
 
@@ -116,7 +116,7 @@ These rules are the product. Do not deviate.
 | F3 | Tier 2 healer + circuit breaker | src/fix/healer.ts, src/do/HealerBreaker.ts | F2 |
 | F4 | Request-path integration | src/router/pipeline.ts, src/fix/index.ts | F3 |
 | F5 | Recovery observability surface | assets/fix/index.html (GSAP), src/api/fix-stats.ts | F4 |
-| F6 | Subscription + savings-share billing | src/billing/meters.ts, src/billing/gitpaywall.ts, migrations/0004 | F4 |
+| F6 | Subscription + savings-share billing | src/billing/meters.ts, src/billing/entitlement.ts, migrations/0004 | F4 |
 | F7 | Public error catalog | assets/errors/, src/api/catalog-publish.ts | F2, F6 |
 | F8 | Conversion tracking | GTM-CONTAINER-IMPORT.json, sGTM + CAPI events | F6 |
 
@@ -141,7 +141,7 @@ Cards: request success rate, recovered requests, recovered by Fix, catalog hit r
 Success: every card links to a filtered request log. Catalog hit rate trends up as the catalog fills.
 
 ### F6 - Billing
-GitPaywall webhook provisions and revokes the org_ key and plan flag. Savings share metered at 5% against the frozen receipt baseline, classifier probe subtracted, floored at zero, voided by !bad feedback. Meter events buffered through the queue.
+Stripe webhooks provision and revoke the org_ key and plan flag. Savings share metered at 5% against the frozen receipt baseline, classifier probe subtracted, floored at zero, voided by !bad feedback. Meter events buffered through the queue.
 Success: /api/billing/preview resolves every share line to a request id with baseline price, selected price, and timestamp. A cancelled subscription drops to read-only observability for 30 days.
 
 ### F7 - Public Catalog
@@ -165,7 +165,7 @@ wrangler secret put ANTHROPIC_API_KEY
 wrangler secret put OPENAI_API_KEY
 wrangler secret put GEMINI_API_KEY
 wrangler secret put STRIPE_SECRET_KEY
-wrangler secret put GITPAYWALL_WEBHOOK_SECRET
+wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put HEALER_API_KEY
 wrangler secret put GATE_ADMIN_KEY
 wrangler queues create meter-flush

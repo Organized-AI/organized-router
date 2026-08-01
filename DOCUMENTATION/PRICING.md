@@ -2,15 +2,21 @@
 
 Two components. One flat, one contingent.
 
-## 1. Subscription: $50 per month
+## 0. What is free
 
-Sold through GitPaywall as recurring repository access. Includes:
+Everything in this repository, under MIT. The repair engine, the rule set, the error
+taxonomy, the patch schema, the healer protocol, and the published catalog. Self-host
+the whole thing and pay nothing, ever. No feature is held back for the paid tier.
 
+## 1. Hosted: $50 per month
+
+Sold and billed on our own Stripe account, not through a repo paywall. Includes:
+
+- `fix.organizedai.vip`, the hosted healing endpoint. Tier 2 inference is on us
+- the private catalog: verified patches before they are published
 - the router endpoint (OpenAI and Anthropic compatible)
-- Organized Fix, unlimited recoveries, no per-repair charge
-- the full patch catalog, including private signatures not yet published
 - observability: request log, provider attempts, cost by model and agent
-- self-hosting rights for the whole gateway under LICENSE.md
+- not operating any of it
 
 ## 2. Savings share: 5% of verified savings
 
@@ -35,13 +41,29 @@ The subscription carries the product. The share exists to align the router's inc
 
 An earlier draft billed a fee per recovered request. That was dropped. Charging per recovery means profiting from a user's breakage in perpetuity, and the incentive points the wrong way: the vendor benefits when repairs stay rare and expensive. Folding recoveries into the flat $50 points the incentive the right way. Every repair we learn makes the catalog better, which lowers our own healer cost, which is the only cost recoveries carry. We would rather have a catalog with a 95% hit rate than a per-repair meter.
 
-## GitPaywall setup
+## Why not a repo paywall
 
-1. Create the product at $50/month recurring.
-2. Point it at `Organized-AI/organized-router` (private).
-3. Entitlement grants repository read access on active subscription, revokes on cancellation or failed payment.
-4. Webhook `subscription.created` provisions a router API key (`org_...`) into KV `user:<id>` with `plan=pro`, and seeds the user's baseline as `pending_receipt`.
-5. Webhook `subscription.deleted` sets `plan=none`. The key keeps working in read-only observability mode for 30 days so a lapsed user can still export their own data.
+An earlier draft sold repository access at $50/month through GitPaywall. That is dropped.
+
+The prior art here is MIT and free. Selling closed access to a design borrowed from an
+MIT project, to an audience that can already run the MIT original, is a weak position and
+an ugly one. Publishing the engine costs us nothing we were actually selling: the value is
+the hosted healer, the private catalog, and the savings ledger, none of which live in a
+git clone.
+
+There is also a mechanical reason. A repo paywall running on Stripe Connect puts the
+subscription under the platform's account while the savings meter has to live on ours.
+That is two customer records, two invoices, and no way to put both lines on one bill.
+
+## Entitlement
+
+Stripe owns the product and the price. Our own worker owns the entitlement.
+
+1. `checkout.session.completed` provisions a router key (`org_...`) into KV `user:<id>` with `plan=pro`, and seeds the baseline as `pending_receipt`.
+2. `invoice.payment_failed` marks `plan=past_due`. The healer keeps answering for the grace period; only the private catalog is gated.
+3. `customer.subscription.deleted` sets `plan=none`. The key drops to read-only observability for 30 days so a lapsed user can export their own data, then stops.
+
+No GitHub collaborator invites, no PAT with `admin:org`, no access revocation race.
 
 ## Stripe
 

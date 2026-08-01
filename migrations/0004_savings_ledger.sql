@@ -1,4 +1,4 @@
--- Savings share at 5%. Subscription is billed separately through GitPaywall.
+-- Savings share at 5%. Subscription billed separately on Stripe.
 
 CREATE TABLE IF NOT EXISTS savings_ledger (
   id TEXT PRIMARY KEY, user_id TEXT NOT NULL, request_id TEXT NOT NULL,
