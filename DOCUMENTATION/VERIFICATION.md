@@ -8,9 +8,10 @@ Verified locally on 2026-09-16/17, using Node 22.22.3, Wrangler 4.133.0 and Vite
 | Behavioral unit/integration tests | 72 passed across three test files |
 | Local subscription transport tests | 6 passed |
 | Configuration, migration, rollback, service ownership and private Grafana setup tests | 22 passed |
-| OpenTelemetry SDK/export/local capture tests | 6 passed |
+| OpenTelemetry SDK/export/local capture tests | 7 passed |
 | Live usage, ccusage and native CLI argument regression | 7 passed |
 | Live Codex subscription request | Passed; router and CLI usage reconciled |
+| Hosted Grafana Loki, Tempo and ccusage snapshots | Passed; real request and server/client span correlation reconciled |
 | Worker deploy dry run | Passed; gateway and RouterCache Durable Object bundle |
 | Real workerd HTTP/runtime checks, including native Codex and OTLP | 15 passed |
 | Dependency audit, including dev dependencies | Zero reported vulnerabilities |
@@ -48,11 +49,22 @@ The [live usage monitor](LIVE-USAGE.md) has seven passing checks, including the
 installed ccusage binary and native Codex configuration. Its installed service
 endpoint returns current local usage, recorded subscription-limit snapshots and
 the separately counted real router response. This proves local live capture;
-hosted Grafana ingestion still requires its own end-to-end evidence.
+hosted Grafana ingestion is verified separately below.
 The running terminal watch refreshed against the installed service and stopped
 on Ctrl-C. Four additional Grafana setup checks cover allowed
 destinations, owner-only settings, failure preservation, response privacy,
 partial rejections and refusing credential forwarding on redirects.
+
+The [Grafana ingestion report](../artifacts/grafana-ingestion-report.json) verifies
+a real native subscription request with 18,027 input tokens, 4,992 cached input
+tokens and 10 output tokens across CLI, proxy, local capture, Loki logs and Tempo
+traces. The request is a server span with one client child; the completion log's
+trace/span IDs and token counts agree. Live ccusage snapshots are also present.
+The exporter reports zero failures. Hosted testing exposed and corrected Grafana's
+HTTP 204 success replies and the distinction between JS SDK and OTLP span enums.
+Credentials remain in owner-only, ignored local settings; the temporary encrypted
+phone handoff is closed and its extra credential copy removed. A durable Collector
+has not been installed; export is best-effort with independent local capture.
 
 The [native connection report](../artifacts/connection-runtime-report.json)
 records an isolated Codex CLI/app-server test against the real Worker with a dummy

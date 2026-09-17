@@ -43,7 +43,7 @@ class GrafanaSetupTests(unittest.TestCase):
         def open_request(request, **kwargs):
             requests.append(request)
             response = io.BytesIO(b'{}')
-            response.status = 200
+            response.status = 204 if request.full_url.endswith('/logs') else 200
             return response
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "telemetry.json"

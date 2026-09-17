@@ -37,6 +37,9 @@ test('SDK creates correlated OTLP spans/logs and excludes payloads, auth and acc
   assert.equal(logs(batches).length, 1);
   const root = spans(batches).find(s => s.name === 'router.request');
   const upstream = spans(batches).find(s => s.name === 'gen_ai.client');
+  // OTLP protobuf enum values differ from the JS SDK's SpanKind values.
+  assert.equal(root.kind, 2); // OTLP SPAN_KIND_SERVER
+  assert.equal(upstream.kind, 3); // OTLP SPAN_KIND_CLIENT
   assert.equal(root.traceId, 'a'.repeat(32));
   assert.equal(root.parentSpanId, 'b'.repeat(16));
   assert.equal(upstream.parentSpanId, root.spanId);
@@ -88,6 +91,20 @@ test('collector failure leaves local capture intact and invalid configuration ne
   assert.equal(invalid.telemetry.stats.configurationError, true);
   assert.equal(logs(invalid.batches).length, 1);
   assert.throws(() => otlpSettings({ OTEL_TRACES_SAMPLER_ARG: '2' }));
+});
+
+test('Grafana HTTP 204 acknowledgements succeed without attempting to parse an empty body', async t => {
+  const received = [];
+  const base = await listen(t, http.createServer(async (req, res) => {
+    const chunks = []; for await (const c of req) chunks.push(c);
+    received.push({path: req.url, payload: JSON.parse(Buffer.concat(chunks).toString())});
+    res.writeHead(204); res.end();
+  }));
+  const {telemetry} = setup(t, {env: {OTEL_EXPORTER_OTLP_ENDPOINT: base}});
+  telemetry.start('router.request').end(); await telemetry.flush();
+  assert.deepEqual(received.map(r => r.path).sort(), ['/v1/logs', '/v1/traces']);
+  assert.equal(telemetry.stats.exportedBatches, 2);
+  assert.equal(telemetry.stats.exportFailures, 0);
 });
 
 test('local capture rotates private OTLP JSON files and keeps records parseable', async t => {

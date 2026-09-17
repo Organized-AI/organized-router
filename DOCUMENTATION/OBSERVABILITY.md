@@ -19,7 +19,8 @@ or concrete routing experiments; traffic volume alone does not trigger it.
 
 These are roles, not a requirement to deploy six services. Grafana Cloud reduces
 backend operations; self-hosting gives storage control with additional maintenance.
-No hosted account, plan, destination or paid deployment was created here.
+The user's existing Grafana Cloud stack is now receiving local subscription
+telemetry. No new hosted account, plan or Cloudflare deployment was created.
 
 The [Grafana versus PostHog assessment](GRAFANA-VS-POSTHOG.md) compares concrete
 cache investigations, routing experiments, ingestion paths, privacy and cost.
@@ -126,8 +127,11 @@ the connection is complete.
 The existing stack can be queried through `gcx`, but its experimental Cloud OAuth
 exchange returned HTTP 404 and the access-policy plugin proxy denied credential
 provisioning with HTTP 403 during setup. The user subsequently created the scoped
-policy and token in their signed-in browser. Hosted export remains pending private
-credential entry on the router host; no hosted dashboard has been created.
+policy and token in their signed-in browser and submitted the settings through a
+temporary encrypted phone handoff. The owner-only exporter settings are installed,
+the handoff has closed, and the extra credential copy was removed. Live ingestion
+is verified in [`grafana-ingestion-report.json`](../artifacts/grafana-ingestion-report.json).
+No hosted dashboard has been created.
 
 Both runtimes support the same configuration keys:
 
@@ -173,6 +177,9 @@ pending data. Failed exports increment counters while local capture continues.
 Invalid exporter configuration disables remote export and surfaces
 `configurationError`; it does not turn an inference request into a failure.
 Partial-success rejections from an OTLP HTTP 200 are counted as failures.
+Grafana's successful HTTP 204 acknowledgements are accepted without parsing an
+empty body. Named SDK span kinds produce a server request span and client upstream
+span; the SDK and OTLP protocol use different numeric enum values.
 
 App exports are best-effort, with no built-in durable retry. Abrupt termination,
 full queues or exhausted storage can drop telemetry. Use Collector/Alloy delivery
@@ -185,14 +192,20 @@ would require a collector tail-sampling policy and is not enabled here.
 Run `npm run test:telemetry` for correlation, privacy, export, partial rejection,
 collector outages, rotation and slow-collector streaming tests. The real Worker
 suite additionally reconciles OTLP request/attempt spans and logs with actual
-HTTP calls, cache hits and fallbacks. These use local OTLP HTTP receiver fixtures;
-hosted Grafana ingestion is not claimed without destination credentials.
+HTTP calls, cache hits and fallbacks. These suites use local OTLP HTTP receiver
+fixtures. Hosted ingestion has its own independent verification below.
 
 The live subscription/OTel probe is separately recorded in
 [`subscription-telemetry-report.json`](../artifacts/subscription-telemetry-report.json).
 It reconciles one real response across native CLI usage, router counters, one
-completion log and two spans. The existing Grafana Cloud stack has been reached
-through its CLI; hosted ingestion remains pending a usable ingestion credential.
+completion log and two spans. The newer
+[`grafana-ingestion-report.json`](../artifacts/grafana-ingestion-report.json)
+reconciles a real subscription request across Codex, router receipts, local OTLP,
+Grafana Loki and Tempo: 18,027 input tokens, 4,992 cached input tokens and 10 output
+tokens. Its server/client span kinds, parent-child relationship and completion log
+correlation are verified, with zero observed export/capture failures. Changed
+ccusage snapshots are also present in Grafana. This uses direct best-effort export;
+the durable Collector template remains uninstalled.
 
 Prometheus metrics, dashboards and alert rules are future work. Priorities are
 request rate, errors, latency, cache-read ratio, exact reuse, fallback frequency and

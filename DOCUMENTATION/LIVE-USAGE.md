@@ -76,7 +76,9 @@ source and numeric token counts. These are separate from request completion logs
 and do not create inference spans. They are aggregate snapshots: query the most
 recent sample, not the sum of samples. Quota snapshots remain in the local view.
 Existing OTLP configuration sends the usage logs to Grafana alongside request logs
-when hosted export is connected. This implementation does not add a Prometheus
+when hosted export is connected. The current Grafana connection has been verified
+with real usage snapshots; see the [ingestion report](../artifacts/grafana-ingestion-report.json).
+This implementation does not add a Prometheus
 metrics exporter or a hosted dashboard.
 
 ## Verification

@@ -1,4 +1,4 @@
-import { ROOT_CONTEXT, trace, SpanStatusCode } from '@opentelemetry/api';
+import { ROOT_CONTEXT, trace, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { BasicTracerProvider, BatchSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler } from '@opentelemetry/sdk-trace-base';
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -72,7 +72,8 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
             if (!response.ok) { await response.body?.cancel(); throw new Error('OTLP rejected export'); }
             // An OTLP HTTP 200 may contain partial-success rejections.
             stage = 'response';
-            const result = await response.json();
+            // Grafana's OTLP log gateway also uses 204 No Content for success.
+            const result = response.status === 204 ? {} : await response.json();
             const partial = result.partialSuccess;
             if (partial && (Number(partial.rejectedSpans ?? partial.rejectedLogRecords ?? 0) > 0 || partial.errorMessage)) {
               stage = 'partial_success';
@@ -105,7 +106,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
   let flushing;
   Object.defineProperty(stats, 'pendingBatches', { enumerable: true, get: () => pending.size });
   Object.defineProperty(stats, 'flushing', { enumerable: true, get: () => Boolean(flushing) });
-  const begin = (name, parent = ROOT_CONTEXT, values = {}, kind = 2) => {
+  const begin = (name, parent = ROOT_CONTEXT, values = {}, kind = SpanKind.SERVER) => {
     const started = Date.now();
     const span = tracer.startSpan(name, { kind, attributes: attributes(values) }, parent);
     const ctx = trace.setSpan(parent, span);
@@ -114,7 +115,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
     return {
       traceId: ids.traceId, spanId: ids.spanId,
       traceparent: `00-${ids.traceId}-${ids.spanId}-${ids.traceFlags & 1 ? '01' : '00'}`,
-      child: (childName, childValues = {}) => begin(childName, ctx, childValues, 3),
+      child: (childName, childValues = {}) => begin(childName, ctx, childValues, SpanKind.CLIENT),
       end(finalValues = {}, failed = false) {
         if (ended) return;
         ended = true;
@@ -122,7 +123,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
         const fields = attributes({ ...values, ...finalValues, 'organized.duration_ms': Math.max(0, Date.now() - started) });
         span.setAttributes(fields);
         if (failed) span.setStatus({ code: SpanStatusCode.ERROR });
-        if (kind === 2) logger.emit({ context: ctx, severityNumber: failed ? 17 : 9, severityText: failed ? 'ERROR' : 'INFO',
+        if (kind === SpanKind.SERVER) logger.emit({ context: ctx, severityNumber: failed ? 17 : 9, severityText: failed ? 'ERROR' : 'INFO',
           body: name + '.completed', attributes: fields });
         span.end();
       },

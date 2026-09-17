@@ -41,3 +41,4 @@ Cloudflare Workers/TypeScript gateway. Current work is the caching track in
 - Cache eviction scans expiry metadata, not stored payloads, and deletes in batches of at most 128 keys.
 - SQLite connection context managers commit/rollback but do not close; use `closing` to release handles.
 - Codex 0.154.0 can drop root `-c` options when another `-c` follows the subcommand. Launchers must collect configuration options at the root and apply transport settings last; verify the effective native provider.
+- Use the OpenTelemetry API's named `SpanKind` constants; the JS and OTLP wire enum numbers differ. Grafana's OTLP log gateway can acknowledge success with HTTP 204 and no body.

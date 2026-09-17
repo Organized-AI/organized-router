@@ -40,6 +40,8 @@ def verify_access(endpoint, auth, *, opener=None):
             headers={"Authorization": auth, "Content-Type": "application/json"})
         try:
             with opener.open(request, timeout=10) as response:
+                if response.status == 204:
+                    continue  # Grafana's log gateway can acknowledge without a body.
                 if response.status != 200:
                     raise RuntimeError(f"Grafana {signal} check returned HTTP {response.status}; settings were not saved.")
                 body = response.read(65537)
