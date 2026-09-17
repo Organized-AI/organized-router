@@ -13,8 +13,12 @@
     "build": "wrangler deploy --config wrangler.toml --dry-run --outdir dist",
     "verify": "npm run typecheck && npm test && npm run build",
     "test:runtime": "node scripts/runtime-test.mjs",
-    "codex:local": "node scripts/codex-local.mjs",
-    "router:status": "node scripts/local-status.mjs"
+    "codex:local": "node scripts/codex-subscription.mjs",
+    "codex:api": "node scripts/codex-local.mjs",
+    "router:subscription": "node scripts/subscription-server.mjs",
+    "router:status": "node scripts/subscription-status.mjs",
+    "router:api-status": "node scripts/local-status.mjs",
+    "test:subscription": "node --test tests/subscription.runtime.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260917.1",

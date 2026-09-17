@@ -7,6 +7,7 @@ Cloudflare Workers/TypeScript gateway. Current work is the caching track in
 
 - `npm run verify`: types, behavioral tests, deployment dry run.
 - `npm run test:runtime`: actual workerd, Durable Objects, local HTTP fixtures.
+- `npm run test:subscription`: local subscription transport fixtures; no live inference.
 - `npm audit`: dependency advisories.
 - `git diff --check`: patch formatting.
 
@@ -21,6 +22,7 @@ Cloudflare Workers/TypeScript gateway. Current work is the caching track in
 - Do not count replayed historical usage as another provider charge.
 - Unknown pricing/usage stays unknown; estimated savings must not enter billing.
 - No request/response payloads in receipts, and no secrets in logs or commits.
+- Subscription mode sends native Codex auth only to the fixed ChatGPT backend. Never fall back to paid API inference or persist OAuth credentials.
 
 ## Local lessons
 

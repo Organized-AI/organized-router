@@ -4,12 +4,29 @@ A self-hosted LLM gateway built around caching: preserve provider prompt caches,
 
 TypeScript · Cloudflare Workers · Durable Objects · MIT
 
+## Use your Codex subscription
+
+The local subscription mode uses your existing ChatGPT login and plan. No provider
+API key is needed. Sign in with `codex login`, then start the local router:
+
+```sh
+npm run router:subscription
+```
+
+In another terminal, run `npm run codex:local`. Check native prompt-cache usage
+with `npm run router:status`. Codex → local Organized Router → ChatGPT's Codex
+backend. Your selected model and native session/cache fields are preserved;
+the router observes reported cached tokens without storing or replaying coding
+responses. Subscription limits still apply. This launches a CLI session; it does
+not reroute an already-running desktop chat. See the [connection guide](DOCUMENTATION/CACHING.md#connect-codex-with-your-chatgpt-subscription).
+
 ## Run
 
 ```sh
 npm ci
 npm run verify
 npm run test:runtime
+npm run test:subscription
 ```
 
 The runtime suite starts workerd and a local HTTP model fixture, tests all three API protocols, persistence, concurrency, expiry and purge, then shuts down. It makes no paid model calls. Requires Node 22.12+.
@@ -27,6 +44,7 @@ See [the configuration and API guide](DOCUMENTATION/CACHING.md) for requests, au
 ## What works
 
 - Native `/v1/responses`, `/v1/chat/completions`, and `/v1/messages` forwarding.
+- Local Codex subscription transport with native login, streaming, and cache-usage observation.
 - Provider cache controls preserved, including Anthropic markers and OpenAI cache keys/retention.
 - Session affinity to the last successful provider/model; ordered fallback for transient errors.
 - Opt-in exact response caching for stateless text requests, with per-key isolation and bounded persistent storage.

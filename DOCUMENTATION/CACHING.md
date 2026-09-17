@@ -38,21 +38,58 @@ curl http://localhost:8787/v1/responses \
 
 Repeat the request to see `X-Organized-Cache: hit`. Response bodies retain provider IDs and historical usage exactly; `X-Organized-Upstream-Attempts: 0` and the gateway receipt distinguish a replay from new inference. Do not sum historical usage from replayed response bodies as new provider consumption.
 
-## Connect Codex locally
+## Connect Codex with your ChatGPT subscription
 
-Start the gateway with `npm run dev` and populate its provider keys in `.dev.vars`.
-Then run `npm run codex:local` to launch Codex through `http://127.0.0.1:8787/v1`.
-The launcher chooses the configured Responses alias, passes the private gateway key
-through an environment variable, disables WebSocket transport, and assigns a stable
-session ID for affinity. It leaves exact-response caching off for coding sessions.
-Use `npm run router:status` to check the local endpoint and cache counters without
-printing either credential. The launcher does not change global Codex settings or
-replace an existing ChatGPT login; the launched session uses provider API billing.
-It does not move an already-running chat onto the gateway.
+```sh
+codex login                      # Choose ChatGPT, if not already signed in.
+npm run router:subscription       # Keep this terminal running.
+# In another terminal in this repository:
+npm run codex:local
+npm run router:status             # Metadata and reported cache tokens only.
+```
 
-Codex provider configuration and authentication are documented in the
-[official configuration guide](https://learn.chatgpt.com/docs/config-file/config-advanced)
-and [authentication guide](https://learn.chatgpt.com/docs/auth).
+The HTTP flow is Codex CLI → `http://127.0.0.1:8788` →
+`https://chatgpt.com/backend-api/codex`. HTTP API transport does not require
+separate provider API billing. The launcher configures `requires_openai_auth=true`
+and `forced_login_method="chatgpt"`; Codex owns login and token refresh. No OpenAI
+API key is requested. The proxy forwards the native bearer and account header only
+to the fixed ChatGPT host and has no provider fallback. Plan limits and upstream
+quota responses remain in effect.
+
+The launcher keeps the model from your Codex settings, applies provider overrides
+only to the child process, and uses HTTP streaming instead of WebSockets. It does
+not edit global Codex settings or reroute an already-running desktop chat.
+Additional CLI arguments work, for example `npm run codex:local -- --cd /path/to/project`.
+
+Coding requests retain their body bytes, tool schemas, cache keys, session and
+turn headers. Provider-native prompt caching remains available; the proxy neither
+creates a second prompt cache nor replays tool execution or generated answers.
+Reported cache tokens show backend prefix reuse, not dollar savings or a guaranteed
+increase in subscription quota. This mode does not use the API gateway's Durable
+Object response cache or routing fallback.
+
+The local proxy accepts only native Responses, compaction and model-list routes.
+It binds to IPv4 loopback, rejects browser-origin requests, requires a separate
+local gateway secret, and blocks upstream redirects. The generated secret is in
+gitignored `.local/subscription.key` with owner-only permissions; it is not your
+ChatGPT credential. OAuth tokens, account IDs, prompts and responses are never
+written to router logs or cache storage. Counters and the latest 20 metadata-only
+receipts live in memory and reset on restart. A missing usage report stays unknown
+in its receipt; `responsesWithCacheUsage` counts reports with known cached tokens.
+
+Codex documents these provider and authentication settings in its
+[configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+and [authentication guide](https://learn.chatgpt.com/docs/auth). This local transport
+was live-tested with Codex CLI 0.154.0; future backend changes may require updates.
+
+## Optional provider API connection
+
+The separate Worker gateway remains available for explicitly configured provider
+API keys. Start it with `npm run dev`, then use `npm run codex:api` and
+`npm run router:api-status`. That mode uses provider API billing and port 8787;
+it is not needed for the subscription connection above. Its Codex launcher selects
+the configured Responses alias, assigns session affinity, and disables exact
+response reuse for coding sessions.
 
 ## Three distinct mechanisms
 
