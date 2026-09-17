@@ -19,6 +19,7 @@ export class SubscriptionUsage {
   skipping = false;
   decoder = new TextDecoder();
   usage = null;
+  responseModel = null;
   complete = false;
   push(chunk) {
     const text = this.decoder.decode(chunk, { stream: true });
@@ -27,7 +28,11 @@ export class SubscriptionUsage {
         if (!this.skipping && this.buffer.startsWith('data:')) {
           try {
             const event = JSON.parse(this.buffer.slice(5));
-            if (event.type === 'response.completed') this.complete = true;
+            if (event.type === 'response.completed') {
+              this.complete = true;
+              const model = event.response?.model;
+              if (typeof model === 'string' && /^[a-zA-Z0-9._/-]{1,128}$/.test(model)) this.responseModel = model;
+            }
             const u = event.type === 'response.completed' ? event.response?.usage : undefined;
             if (u && [u.input_tokens, u.output_tokens].every(n => Number.isSafeInteger(n) && n >= 0)) {
               const cached = u.input_tokens_details?.cached_tokens;
@@ -48,34 +53,58 @@ export class SubscriptionUsage {
 }
 
 // requestUpstream is an explicit test seam. The production runner never supplies it.
-export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.request }) {
+export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.request, telemetry, usageMonitor }) {
   if (!gatewayKey || gatewayKey.length < 32) throw new Error('A private local gateway key is required.');
   const expected = Buffer.from(gatewayKey);
-  const stats = { mode: 'chatgpt-subscription', upstream: subscriptionOrigin + '/backend-api/codex',
-    requests: 0, completedResponses: 0, failedRequests: 0, inputTokens: 0, outputTokens: 0,
+  const stats = { mode: 'chatgpt-subscription', startedAt: new Date().toISOString(), upstream: subscriptionOrigin + '/backend-api/codex',
+    requests: 0, inFlight: 0, completedResponses: 0, failedRequests: 0, inputTokens: 0, outputTokens: 0,
     cachedInputTokens: 0, responsesWithCacheUsage: 0, lastStatus: null, receipts: [] };
   const server = http.createServer((req, res) => {
-    const json = (status, value) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); };
+    let span;
+    const json = (status, value) => {
+      span?.end({ 'http.response.status_code': status }, status >= 400);
+      if (span) void telemetry.flush();
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store',
+        ...(span ? { 'x-organized-trace-id': span.traceId } : {}) }); res.end(JSON.stringify(value));
+    };
     if (!/^127\.0\.0\.1(?::\d+)?$/.test(req.headers.host ?? '') || req.headers.origin) return json(403, { error: 'Loopback clients only.' });
     if (req.method === 'GET' && req.url === '/health') return json(200, { ok: true, mode: stats.mode });
+    const nativeUrl = req.url.startsWith('/v1/') ? req.url.slice(3) : req.url;
+    const path = nativeUrl.split('?')[0];
+    // Exclude polling endpoints; never put arbitrary URL/query text in telemetry.
+    if (!['/api/cache/stats', '/api/usage'].includes(path)) span = telemetry?.start('router.request', req.headers.traceparent, {
+      'http.request.method': ['GET', 'POST'].includes(req.method) ? req.method : 'OTHER',
+      'http.route': allowed.has(req.method + ' ' + path) ? path : 'unmatched',
+    });
     const provided = Buffer.from(req.headers['x-organized-gateway-key'] ?? '');
     if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return json(401, { error: 'Local gateway authentication required.' });
-    if (req.method === 'GET' && req.url === '/api/cache/stats') return json(200, stats);
-    const path = req.url.split('?')[0];
+    if (req.method === 'GET' && req.url === '/api/cache/stats') return json(200, { ...stats, telemetry: telemetry?.stats });
+    if (req.method === 'GET' && req.url === '/api/usage') return json(200, {
+      ...(usageMonitor?.snapshot() ?? {status: 'disabled', sampledAt: null, codex: null, quota: null, errors: []}),
+      router: { startedAt: stats.startedAt, requests: stats.requests, completedResponses: stats.completedResponses,
+        inputTokens: stats.inputTokens, cachedInputTokens: stats.cachedInputTokens, outputTokens: stats.outputTokens,
+        responsesWithCacheUsage: stats.responsesWithCacheUsage },
+    });
     if (!allowed.has(req.method + ' ' + path)) return json(404, { error: 'Unsupported subscription endpoint.' });
     if (!/^Bearer \S+$/i.test(req.headers.authorization ?? '') || !req.headers['chatgpt-account-id']) return json(401, { error: 'Use Codex signed in with ChatGPT.' });
     stats.requests++;
+    stats.inFlight++;
     const headers = cleanHeaders(req.headers);
     // SSE stays observable without altering the request body or cache/session headers.
     headers['accept-encoding'] = 'identity';
+    const upstreamSpan = span?.child('gen_ai.client', { 'gen_ai.provider.name': 'openai',
+      'gen_ai.operation.name': path === '/responses' ? 'responses' : path === '/models' ? 'models' : 'compact' });
+    if (upstreamSpan) headers.traceparent = upstreamSpan.traceparent;
     const observer = new SubscriptionUsage();
     let recorded = false;
     let upstream;
     let upstreamResponse;
-    const receipt = { endpoint: path, status: null, contentType: null, contentEncoding: null, failed: false, usage: null };
+    const receipt = { endpoint: path, status: null, contentType: null, contentEncoding: null, failed: false, usage: null,
+      ...(span ? { traceId: span.traceId, spanId: span.spanId } : {}) };
     const record = (failed) => {
       if (recorded) return;
       recorded = true;
+      stats.inFlight--;
       receipt.failed = failed && !observer.complete;
       receipt.usage = observer.usage;
       stats.receipts.push(receipt);
@@ -90,6 +119,16 @@ export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.re
           stats.cachedInputTokens += observer.usage.cachedInputTokens;
         }
       }
+      const fields = { 'http.response.status_code': receipt.status ?? 502, 'organized.upstream.attempts': 1,
+        'organized.cache.result': 'native', 'organized.usage.known': observer.usage !== null,
+        ...(observer.responseModel ? { 'gen_ai.response.model': observer.responseModel } : {}),
+        ...(receipt.failed ? { 'error.type': receipt.status >= 400 ? 'upstream_http_error' : 'transport_error' } : {}),
+        ...(observer.usage ? { 'gen_ai.usage.input_tokens': observer.usage.inputTokens,
+          'gen_ai.usage.output_tokens': observer.usage.outputTokens,
+          ...(observer.usage.cachedInputTokens !== null ? { 'organized.cache.read_tokens': observer.usage.cachedInputTokens } : {}) } : {}) };
+      upstreamSpan?.end(fields, receipt.failed);
+      span?.end(fields, receipt.failed);
+      if (telemetry) void telemetry.flush();
     };
     const fail = () => {
       record(true);
@@ -99,7 +138,7 @@ export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.re
       upstream?.destroy();
     };
     try {
-      upstream = requestUpstream(new URL('/backend-api/codex' + req.url, subscriptionOrigin), { method: req.method, headers }, response => {
+      upstream = requestUpstream(new URL('/backend-api/codex' + nativeUrl, subscriptionOrigin), { method: req.method, headers }, response => {
         upstreamResponse = response;
         stats.lastStatus = response.statusCode;
         receipt.status = response.statusCode;
@@ -109,6 +148,7 @@ export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.re
         if (response.statusCode >= 300 && response.statusCode < 400) { response.resume(); return fail(); }
         const responseHeaders = cleanHeaders(response.headers);
         responseHeaders['cache-control'] = 'no-store';
+        if (span) responseHeaders['x-organized-trace-id'] = span.traceId;
         res.writeHead(response.statusCode, responseHeaders);
         // The Codex backend can omit Content-Type. Native clients also close as
         // soon as response.completed arrives, before the HTTP stream ends.

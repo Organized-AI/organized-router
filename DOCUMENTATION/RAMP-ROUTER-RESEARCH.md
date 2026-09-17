@@ -2,6 +2,12 @@
 
 Research date: 2026-09-16. Sources below are public first-party material. This is a reconstruction of documented behavior, not an inspection of Ramp's private implementation. No Ramp gateway source was found in this research, and no proprietary implementation is copied.
 
+Updated 2026-09-17: Ramp's **public CLI connector** was located and inspected.
+Its MIT-licensed session-migration helpers are adapted with attribution. See the
+[connection audit](RAMP-CONNECTION-AUDIT.md) and the separate
+[Ramp/modelrouter policy review](ROUTING-POLICY-REVIEW.md). Public connector source
+does not establish the private gateway's implementation.
+
 ## How it was built
 
 Ramp describes Router as an outgrowth of its internal production AI gateway: a shared API, provider integrations, request attribution, model evaluation, and routing policies. Its launch article describes years of internal use before opening the service to external developers. [Ramp launch](https://ramp.com/blog/router-launch)

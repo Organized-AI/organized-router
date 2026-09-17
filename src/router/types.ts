@@ -33,6 +33,8 @@ export interface Usage {
 }
 export interface Receipt {
   id: string;
+  traceId?: string;
+  spanId?: string;
   at: number;
   route: string;
   candidate: string;

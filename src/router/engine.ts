@@ -2,6 +2,7 @@ import { affinitySeconds, cachePolicy, completedResponse, hash, object } from '.
 import { costs, usageFrom, UsageObserver } from './usage';
 import { EMPTY_USAGE, type Affinity, type CacheEntry, type Candidate, type Endpoint,
   type Json, type Receipt, type RouterConfig, type Store, type Usage } from './types';
+import type { RouterSpan, Telemetry } from '../telemetry/telemetry.mjs';
 
 type Result = { response?: Response; body?: string; status: number; headers: Headers; candidate: string;
   usage: Usage; cost: number | null; delta: number | null; attempts: number; cacheable: boolean };
@@ -29,9 +30,28 @@ export async function readBounded(stream: ReadableStream<Uint8Array> | null, max
 export class RouterEngine {
   private pending = new Map<string, Promise<Result>>();
   constructor(private store: Store, private config: RouterConfig, private keys: Record<string, string>,
-    private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now()) {}
+    private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private telemetry?: Telemetry) {}
 
   async handle(request: Request, waitUntil: (p: Promise<unknown>) => void = () => {}): Promise<Response> {
+    const path = new URL(request.url).pathname;
+    const span = this.telemetry?.start('router.request', request.headers.get('traceparent'), {
+      'http.request.method': 'POST', 'http.route': ['/v1/responses', '/v1/chat/completions', '/v1/messages'].includes(path) ? path : 'unmatched' });
+    try {
+      const response = await this.route(request, waitUntil, span);
+      if (span) response.headers.set('x-organized-trace-id', span.traceId);
+      if (response.status >= 400) {
+        span?.end({ 'http.response.status_code': response.status, 'error.type': 'request_failed' }, true);
+        if (this.telemetry) waitUntil(this.telemetry.flush());
+      }
+      return response;
+    } catch (error) {
+      span?.end({ 'http.response.status_code': 503, 'error.type': 'router_error' }, true);
+      if (this.telemetry) waitUntil(this.telemetry.flush());
+      throw error;
+    }
+  }
+
+  private async route(request: Request, waitUntil: (p: Promise<unknown>) => void, span?: RouterSpan): Promise<Response> {
     const path = new URL(request.url).pathname as Endpoint;
     const started = this.now();
     const requestId = crypto.randomUUID();
@@ -68,12 +88,22 @@ export class RouterEngine {
     const cacheKey = bypass ? null : await hash([path, revision, body, ttl, session ?? null]);
     const record = async (result: Result, cache: string, reused: boolean): Promise<void> => {
       const receipt: Receipt = { id: requestId, at: this.now(), route: String(body.model),
+        ...(span ? { traceId: span.traceId, spanId: span.spanId } : {}),
         candidate: result.candidate, status: result.status, cache, latencyMs: this.now() - started,
         attempts: reused ? 0 : result.attempts, usage: reused ? { ...EMPTY_USAGE, known: true } : result.usage,
         unpricedAttempts: reused ? 0 : Math.max(0, result.attempts - 1) + Number(result.cost === null),
         estimatedCostUsd: reused ? 0 : result.cost, promptCacheDeltaUsd: reused ? 0 : result.delta,
         avoidedCostUsd: reused && result.cacheable ? result.cost : null };
       await this.store.record(receipt).catch(() => {});
+      span?.end({ 'organized.request.id': requestId, 'organized.route': String(body.model),
+        'organized.candidate': result.candidate, 'organized.cache.result': cache,
+        'organized.cache.affinity': warm === result.candidate ? 'warm' : 'cold',
+        'organized.upstream.attempts': receipt.attempts, 'http.response.status_code': result.status,
+        'organized.usage.known': receipt.usage.known,
+        ...(receipt.usage.known ? { 'gen_ai.usage.input_tokens': receipt.usage.input, 'gen_ai.usage.output_tokens': receipt.usage.output,
+          'organized.cache.read_tokens': receipt.usage.cacheRead, 'organized.cache.write_tokens': receipt.usage.cacheWrite5m + receipt.usage.cacheWrite1h } : {})
+      }, result.status >= 400);
+      if (this.telemetry) waitUntil(this.telemetry.flush());
     };
     const respond = (result: Result, cache: string): Response => {
       const headers = new Headers(result.headers);
@@ -105,7 +135,7 @@ export class RouterEngine {
     }
     const send = async (): Promise<Result> => {
       const result = await this.forward(body, path, forwarded, ordered, affinityKey, epoch, waitUntil,
-        async final => { await record(final, 'bypass', false); });
+        async final => { await record(final, 'bypass', false); }, span);
       if (!result.response) {
         if (cacheKey && result.cacheable && result.body && new TextEncoder().encode(result.body).length <= this.config.maxEntryBytes) {
           await this.store.putBounded('c:', cacheKey, { body: result.body, candidate: result.candidate,
@@ -122,7 +152,7 @@ export class RouterEngine {
   }
 
   private async forward(body: Json, path: Endpoint, forwarded: Headers, candidates: Candidate[], affinityKey: string | null,
-    epoch: number, waitUntil: (p: Promise<unknown>) => void, streamDone: (result: Result) => Promise<void>): Promise<Result> {
+    epoch: number, waitUntil: (p: Promise<unknown>) => void, streamDone: (result: Result) => Promise<void>, span?: RouterSpan): Promise<Result> {
     let last: Result = { body: JSON.stringify({ error: { message: 'Provider unavailable' } }), status: 502,
       headers: new Headers({ 'content-type': 'application/json' }), candidate: '', usage: EMPTY_USAGE,
       cost: null, delta: null, attempts: 0, cacheable: false };
@@ -141,6 +171,14 @@ export class RouterEngine {
         if (!headers.has('anthropic-version')) headers.set('anthropic-version', '2023-06-01');
       } else headers.set('authorization', 'Bearer ' + this.keys[candidate.provider]);
       last = { ...last, attempts: last.attempts + 1, candidate: candidate.id };
+      const attempt = span?.child('gen_ai.client', { 'gen_ai.provider.name': candidate.provider,
+        'gen_ai.request.model': candidate.model, 'gen_ai.operation.name': path.slice('/v1/'.length),
+        'organized.candidate': candidate.id, 'organized.upstream.attempt': last.attempts });
+      if (attempt) headers.set('traceparent', attempt.traceparent);
+      const finishAttempt = (status: number, usage: Usage) => attempt?.end({ 'http.response.status_code': status,
+        'organized.usage.known': usage.known, ...(status >= 400 ? { 'error.type': 'upstream_error' } : {}),
+        ...(usage.known ? { 'gen_ai.usage.input_tokens': usage.input, 'gen_ai.usage.output_tokens': usage.output,
+          'organized.cache.read_tokens': usage.cacheRead, 'organized.cache.write_tokens': usage.cacheWrite5m + usage.cacheWrite1h } : {}) }, status >= 400);
       try {
         const upstream = await this.fetcher(candidate.baseUrl.replace(/\/$/, '') + path, {
           method: 'POST', headers, body: JSON.stringify({ ...body, model: candidate.model }),
@@ -169,6 +207,7 @@ export class RouterEngine {
             ended = true;
             clearTimeout(timer);
             const prices = costs(observer.usage, candidate);
+            finishAttempt(failed || !observer.complete ? 502 : base.status, observer.usage);
             waitUntil((async () => {
               if (!failed && observer.complete) await pin(candidate);
               await streamDone({ ...base, status: failed || !observer.complete ? 502 : base.status,
@@ -197,6 +236,7 @@ export class RouterEngine {
         last = { ...last, body: text, status: upstream.status, headers: responseHeaders, usage,
           cost: prices.cost, delta: prices.delta, cacheable: upstream.status === 200 && completedResponse(parsed, path) &&
             !/no-store|private/i.test(upstream.headers.get('cache-control') ?? '') };
+        finishAttempt(upstream.status, usage);
         if (upstream.ok) { await pin(candidate); return last; }
         if (!retryable(upstream.status)) return last;
       } catch {
@@ -206,6 +246,7 @@ export class RouterEngine {
         last = { ...last, status: timedOut ? 504 : 502,
           body: JSON.stringify({ error: { type: 'provider_error', message: 'Provider transport failed or timed out' } }),
           usage: EMPTY_USAGE, cost: null, delta: null, cacheable: false };
+        finishAttempt(last.status, EMPTY_USAGE);
       }
       if (affinityKey) await this.store.delete('a:' + affinityKey).catch(() => {});
     }

@@ -67,6 +67,17 @@ describe('Worker authorization', () => {
     const response = await worker.fetch(new Request('https://router/v1/models', { headers: { authorization: 'Bearer tenant-a' } }), env);
     expect((await response.json<{ data: { id: string }[] }>()).data.map(m => m.id)).toEqual(['claude']);
   });
+  it('serves Codex-native discovery only for authorized Responses routes', async () => {
+    const { env, records } = setup();
+    env.CODEX_CATALOG = JSON.stringify({ models: [{ slug: 'test', context_window: 272000 }, { slug: 'claude' }, { slug: 'unconfigured' }] });
+    records.set('key:' + await hash('tenant-a'), { active: true, routes: ['test'] });
+    const headers = { authorization: 'Bearer tenant-a', 'X-Gateway-Client': 'codex' };
+    const result = await worker.fetch(new Request('https://router/v1/models', { headers }), env);
+    expect(await result.json()).toEqual({ models: [{ slug: 'test', context_window: 272000 }] });
+    delete env.CODEX_CATALOG;
+    expect((await worker.fetch(new Request('https://router/v1/models', { headers }), env)).status).toBe(503);
+    expect((await worker.fetch(new Request('https://router/v1/models', { headers: { 'X-Gateway-Client': 'codex' } }), env)).status).toBe(401);
+  });
   it('rejects oversized and malformed requests without upstream calls', async () => {
     const { env, records, downstream } = setup();
     records.set('key:' + await hash('tenant-a'), { active: true, routes: ['test'] });

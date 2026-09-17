@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { localConnection, root } from './local-connection.mjs';
+import { codexArguments } from './codex-arguments.mjs';
 
 try {
   const c = await localConnection();
@@ -18,8 +19,8 @@ try {
   };
   const args = Object.entries(options).flatMap(([key, value]) => ['-c', key + '=' + JSON.stringify(value)]);
   args.push('-c', 'model_providers.organized_router.http_headers={"X-Organized-Cache"="off","X-Organized-Session"="' + randomUUID() + '"}');
-  args.push('--model', c.model, '--cd', root, ...process.argv.slice(2));
-  const child = spawn('codex', args, { stdio: 'inherit', env: { ...process.env, ORGANIZED_ROUTER_API_KEY: c.gatewayKey } });
+  const child = spawn('codex', codexArguments(process.argv.slice(2), args, ['--model', c.model, '--cd', root]),
+    { stdio: 'inherit', env: { ...process.env, ORGANIZED_ROUTER_API_KEY: c.gatewayKey } });
   child.on('error', () => { process.stderr.write('Could not launch Codex CLI.\n'); process.exitCode = 1; });
   child.on('exit', code => { process.exitCode = code ?? 1; });
 } catch (error) {

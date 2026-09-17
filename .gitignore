@@ -4,4 +4,5 @@ node_modules/
 .wrangler/
 dist/
 *.log
+__pycache__/
 .DS_Store

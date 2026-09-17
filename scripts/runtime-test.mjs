@@ -5,11 +5,24 @@ import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { command, verifyNativeConnection } from './connection/native-test.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const temporary = await mkdtemp(join(tmpdir(), 'organized-router-test-'));
 const calls = [];
 const checks = [];
+const telemetryBatches = [];
+const collector = createServer(async (req, res) => {
+  const chunks = []; for await (const chunk of req) chunks.push(chunk);
+  telemetryBatches.push({ path: req.url, payload: JSON.parse(Buffer.concat(chunks).toString()) });
+  res.setHeader('content-type', 'application/json'); res.end('{}');
+});
+await new Promise((resolve, reject) => { collector.once('error', reject); collector.listen(0, '127.0.0.1', resolve); });
+const verifyCodex = process.argv.includes('--codex');
+const native = verifyCodex ? JSON.parse(await command('codex', ['debug', 'models', '--bundled'])) : null;
+const nativeTemplate = native?.models.find(model => model.slug === 'gpt-6-astra');
+if (verifyCodex) assert.ok(nativeTemplate, 'Native Codex template must be available');
+const catalog = verifyCodex ? { models: [{ ...nativeTemplate, slug: 'test', display_name: 'Test', organized_upstream_model: 'gpt-6-astra' }] } : { models: [] };
 let worker;
 let output = '';
 let exit;
@@ -22,13 +35,15 @@ const provider = createServer(async (req, res) => {
     res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"error":{"message":"fixture rate limit"}}'); return;
   }
   if (body.input === 'burst' || body.input === 'purge-inflight') await delay(150);
-  const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 800 }, output_tokens: 10 };
+  const usage = { input_tokens: 1000, input_tokens_details: { cached_tokens: 800 }, output_tokens: 10, total_tokens: 1010 };
   const result = { id: 'fixture-' + calls.length, object: 'response', status: 'completed', model: body.model,
-    output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Fixture completion' }] }], usage };
+    output: [{ id: 'msg-fixture', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Fixture completion' }] }], usage };
   if (body.stream) {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write('event: response.output_item.added\ndata: ' + JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { ...result.output[0], status: 'in_progress', content: [] } }) + '\n\n');
     res.write('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"Fixture completion"}\n\n');
     await delay(10);
+    res.write('event: response.output_item.done\ndata: ' + JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: result.output[0] }) + '\n\n');
     res.end('event: response.completed\ndata: ' + JSON.stringify({ type: 'response.completed', response: result }) + '\n\n'); return;
   }
   res.writeHead(200, { 'content-type': 'application/json' });
@@ -59,8 +74,9 @@ await writeFile(configPath, JSON.stringify({ name: 'organized-router-runtime-tes
   compatibility_date: '2026-09-01', compatibility_flags: ['nodejs_compat'],
   durable_objects: { bindings: [{ name: 'ROUTER_CACHE', class_name: 'RouterCache' }] },
   migrations: [{ tag: 'v1', new_sqlite_classes: ['RouterCache'] }],
-  vars: { LOCAL_MODE: 'true', GATE_API_KEY: 'fixture-router-key',
-    PROVIDER_KEYS: JSON.stringify({ primary: 'fixture-provider-one', backup: 'fixture-provider-two', anthropic: 'fixture-anthropic' }),
+  vars: { LOCAL_MODE: 'true', GATE_API_KEY: 'fixture-router-key', CODEX_CATALOG: JSON.stringify(catalog),
+    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector.address().port}`, OTEL_CAPTURE_CONSOLE: 'false',
+    PROVIDER_KEYS: JSON.stringify({ primary: 'fixture-provider-one', backup: 'fixture-provider-two', anthropic: 'fixture-anthropic-secret' }),
     ROUTER_CONFIG: JSON.stringify({ timeoutMs: 3000, responseTtlSeconds: 30, maxEntries: 128, maxEntryBytes: 64000,
       routes: { test: [candidate('primary'), candidate('backup')], claude: [candidate('anthropic', 'anthropic')] } }) } }));
 
@@ -81,6 +97,15 @@ async function start() {
 }
 async function stop() {
   if (!worker || worker.exitCode !== null) return;
+  // Let the test collector acknowledge completed records before simulating a
+  // normal runtime restart. Crash delivery is deliberately best-effort.
+  for (let i = 0; i < 100; i++) {
+    try {
+      const stats = await (await fetch(base + '/api/cache/stats', { headers: auth, signal: AbortSignal.timeout(100) })).json();
+      if (stats.telemetry && !stats.telemetry.flushing && !stats.telemetry.pendingBatches) break;
+    } catch { break; }
+    await delay(10);
+  }
   const closed = new Promise(resolve => worker.once('exit', resolve));
   worker.kill('SIGTERM');
   const timeout = setTimeout(() => worker.kill('SIGKILL'), 3000);
@@ -95,6 +120,22 @@ async function check(name, fn) {
 }
 try {
   await start();
+  if (verifyCodex) await check('native Codex CLI and app server use the saved API connection and report cache tokens', async () => {
+    const projected = await (await fetch(base + '/v1/models', { headers: { ...auth, 'X-Gateway-Client': 'codex' } })).json();
+    assert.equal(projected.models[0].slug, 'test');
+    const report = await verifyNativeConnection({ root, temporary, base, catalog: projected, native });
+    const stats = await (await fetch(base + '/api/cache/stats', { headers: auth })).json();
+    assert.equal(stats.cacheReadTokens, report.cachedInputTokens);
+    assert.equal(calls[0].headers.authorization, 'Bearer fixture-provider-one');
+    await writeFile(join(root, 'artifacts/connection-runtime-report.json'), JSON.stringify({ verifiedAt: new Date().toISOString(),
+      environment: 'native Codex, saved default config, real workerd, local provider fixture; no paid inference', ...report }, null, 2) + '\n');
+    // A fresh fixture runtime keeps the original behavioral checks independent.
+    await stop();
+    await rm(join(temporary, 'state'), { recursive: true, force: true });
+    calls.length = 0;
+    telemetryBatches.length = 0;
+    await start();
+  });
   await check('unauthorized requests cannot reach providers', async () => {
     assert.equal((await call({}, { authorization: 'Bearer invalid' })).status, 401); assert.equal(calls.length, 0);
   });
@@ -146,7 +187,7 @@ try {
     const body = { model: 'claude', input: undefined, store: undefined, messages: [{ role: 'user', content: 'hello' }],
       system: [{ type: 'text', text: 'a stable prefix', cache_control: { type: 'ephemeral', ttl: '1h' } }] };
     const first = await call(body, {}, '/v1/messages'); assert.equal(first.status, 200); await first.text();
-    assert.deepEqual(calls.at(-1).body.system, body.system); assert.equal(calls.at(-1).headers['x-api-key'], 'fixture-anthropic');
+    assert.deepEqual(calls.at(-1).body.system, body.system); assert.equal(calls.at(-1).headers['x-api-key'], 'fixture-anthropic-secret');
     const second = await call(body, {}, '/v1/messages'); assert.equal(second.headers.get('x-organized-cache'), 'hit'); await second.text();
   });
   await check('Chat Completions pass through and cache independently', async () => {
@@ -184,6 +225,28 @@ try {
     const after = await (await fetch(base + '/api/cache/stats', { headers: auth })).json();
     assert.equal(after.responseEntries, 0); assert.equal(after.affinityEntries, 0);
   });
+  await check('OTLP logs and traces correlate real Worker requests, fallbacks and cache hits without payloads', async () => {
+    const rows = () => telemetryBatches.filter(r => r.path === '/v1/traces').flatMap(r => r.payload.resourceSpans.flatMap(s => s.scopeSpans.flatMap(x => x.spans)));
+    const records = () => telemetryBatches.filter(r => r.path === '/v1/logs').flatMap(r => r.payload.resourceLogs.flatMap(s => s.scopeLogs.flatMap(x => x.logRecords)));
+    const stats = await (await fetch(base + '/api/cache/stats', { headers: auth })).json();
+    for (let i = 0; i < 100 && (rows().filter(s => s.name === 'router.request').length < stats.requests || records().length < stats.requests); i++) await delay(25);
+    const roots = rows().filter(s => s.name === 'router.request');
+    const attempts = rows().filter(s => s.name === 'gen_ai.client');
+    assert.equal(roots.length, stats.requests, JSON.stringify({ telemetry: stats.telemetry, batches: telemetryBatches.length }));
+    assert.equal(attempts.length, calls.length);
+    assert.equal(records().length, stats.requests);
+    assert.ok(records().every(log => roots.some(s => s.traceId === log.traceId && s.spanId === log.spanId)));
+    const attributes = s => Object.fromEntries(s.attributes.map(a => [a.key, Object.values(a.value)[0]]));
+    assert.ok(roots.some(s => attributes(s)['organized.cache.result'] === 'hit' && Number(attributes(s)['gen_ai.usage.input_tokens']) === 0));
+    assert.ok(attempts.some(s => Number(attributes(s)['http.response.status_code']) === 429 && s.status.code === 2));
+    assert.ok(calls.every(c => /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/.test(c.headers.traceparent)));
+    const captured = JSON.stringify(telemetryBatches);
+    for (const secret of ['fixture-provider-one', 'fixture-provider-two', 'fixture-anthropic-secret', 'fixture-router-key', 'a stable prefix', 'affinity-capacity', 'many-']) assert.ok(!captured.includes(secret), 'Telemetry captured a fixture secret or payload marker');
+    await writeFile(join(root, 'artifacts/telemetry-runtime-report.json'), JSON.stringify({ verifiedAt: new Date().toISOString(),
+      environment: 'real workerd and local OTLP HTTP receiver fixture', requestSpans: roots.length,
+      upstreamSpans: attempts.length, correlatedLogs: records().length, payloadRedaction: true,
+      replayHasZeroInferenceTokens: true, upstreamTraceContext: true }, null, 2) + '\n');
+  });
   await check('receipts reconcile upstream calls without duplicated token charges', async () => {
     const response = await fetch(base + '/api/cache/stats', { headers: auth });
     const stats = await response.json();
@@ -202,5 +265,6 @@ try {
   process.stderr.write(output + '\n'); throw e;
 } finally {
   await stop(); await new Promise(resolve => provider.close(resolve));
+  collector.closeAllConnections(); await new Promise(resolve => collector.close(resolve));
   await rm(temporary, { recursive: true, force: true });
 }

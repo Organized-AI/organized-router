@@ -5,11 +5,14 @@ Verified locally on 2026-09-16/17, using Node 22.22.3, Wrangler 4.133.0 and Vite
 | Gate | Result |
 |---|---|
 | TypeScript strict typecheck | Passed |
-| Behavioral unit/integration tests | 71 passed across three test files |
+| Behavioral unit/integration tests | 72 passed across three test files |
 | Local subscription transport tests | 6 passed |
+| Configuration, migration, rollback, service ownership and private Grafana setup tests | 22 passed |
+| OpenTelemetry SDK/export/local capture tests | 6 passed |
+| Live usage, ccusage and native CLI argument regression | 7 passed |
 | Live Codex subscription request | Passed; router and CLI usage reconciled |
 | Worker deploy dry run | Passed; gateway and RouterCache Durable Object bundle |
-| Real workerd HTTP/runtime checks | 13 passed |
+| Real workerd HTTP/runtime checks, including native Codex and OTLP | 15 passed |
 | Dependency audit, including dev dependencies | Zero reported vulnerabilities |
 | Patch whitespace check | Passed |
 
@@ -33,6 +36,38 @@ upstream routing, exact body and session-header preservation, unchanged SSE,
 metadata-only counters, quota errors, blocked redirects, bounded usage parsing,
 model lists, compaction, and terminal completion before HTTP close. Run
 `npm run test:subscription` to reproduce these tests without live inference.
+
+The [live subscription/telemetry report](../artifacts/subscription-telemetry-report.json)
+records a new native request with 18,027 input tokens, zero reported cached tokens
+and 10 output tokens. CLI, router and correlated local OTLP records agree. This
+probe also verified the launcher fix for Codex 0.154.0 dropping root configuration
+overrides when another `-c` option follows the subcommand. The launcher now moves
+user configuration options to the root and applies transport settings last.
+
+The [live usage monitor](LIVE-USAGE.md) has seven passing checks, including the
+installed ccusage binary and native Codex configuration. Its installed service
+endpoint returns current local usage, recorded subscription-limit snapshots and
+the separately counted real router response. This proves local live capture;
+hosted Grafana ingestion still requires its own end-to-end evidence.
+The running terminal watch refreshed against the installed service and stopped
+on Ctrl-C. Four additional Grafana setup checks cover allowed
+destinations, owner-only settings, failure preservation, response privacy,
+partial rejections and refusing credential forwarding on redirects.
+
+The [native connection report](../artifacts/connection-runtime-report.json)
+records an isolated Codex CLI/app-server test against the real Worker with a dummy
+upstream. Saved configuration selected `organized-router` without process-level
+provider overrides. The app server listed the model and retained native history
+visibility both before and after unconfigure. This proves the fixture connection;
+the user's real default is still `openai` pending an idle Codex restart/migration.
+
+The [OTLP runtime report](../artifacts/telemetry-runtime-report.json) reconciles
+167 request spans, 155 upstream spans and 167 correlated completion logs against
+actual workerd HTTP traffic. Checks include payload redaction, trace propagation,
+fallback attempts and zero new inference tokens on exact replay. The separate SDK
+suite covers collector failure, partial rejection, rotation and response streaming
+while export is slow. These are local receiver tests, not hosted Grafana or PostHog
+ingestion tests.
 
 No cloud deployment, production load test, invoice reconciliation, incremental
 cache improvement, or measured production savings is claimed. Run `npm run verify`

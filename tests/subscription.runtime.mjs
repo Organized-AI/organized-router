@@ -32,7 +32,7 @@ test('rejects unauthenticated, browser, foreign-host and non-ChatGPT requests be
     const req = http.request(base + '/health', { headers: { host: 'example.com' } }, res => { assert.equal(res.statusCode, 403); res.resume(); res.on('end', resolve); });
     req.on('error', reject); req.end();
   });
-  for (const path of ['/v1/responses', '/responses/../../evil', '/responses/https://example.com', '/api/cache']) {
+  for (const path of ['/v2/responses', '/responses/../../evil', '/responses/https://example.com', '/api/cache']) {
     assert.equal((await fetch(base + path, { method: 'POST', headers, body: '{}' })).status, 404);
   }
   assert.equal(attempts(), 0);
@@ -60,6 +60,7 @@ test('forwards unchanged payload, OAuth, session and cache headers; streams unch
   assert.equal(await result.text(), stream);
   const statsText = await (await fetch(base + '/api/cache/stats', { headers })).text();
   const stats = JSON.parse(statsText);
+  assert.equal(stats.inFlight, 0);
   assert.equal(stats.completedResponses, 1);
   assert.equal(stats.inputTokens, 1200);
   assert.equal(stats.cachedInputTokens, 1024);
@@ -93,7 +94,7 @@ test('supports native models and compaction paths', async t => {
   const seen = [];
   const { base } = await setup(t, (req, res) => { seen.push(req.url); req.resume(); res.end('{}'); });
   assert.equal((await fetch(base + '/models?client_version=fixture', { headers })).status, 200);
-  assert.equal((await fetch(base + '/responses/compact', { method: 'POST', headers, body: '{}' })).status, 200);
+  assert.equal((await fetch(base + '/v1/responses/compact', { method: 'POST', headers, body: '{}' })).status, 200);
   assert.deepEqual(seen, ['/backend-api/codex/models?client_version=fixture', '/backend-api/codex/responses/compact']);
 });
 
@@ -108,10 +109,13 @@ test('observes terminal usage without Content-Type and treats client close after
   const response = await fetch(base + '/responses', { method: 'POST', headers, body: '{}' });
   const reader = response.body.getReader();
   await reader.read();
+  const active = await (await fetch(base + '/api/cache/stats', { headers })).json();
+  assert.equal(active.inFlight, 1);
   await reader.cancel();
   await upstreamEnded;
   const stats = await (await fetch(base + '/api/cache/stats', { headers })).json();
   assert.equal(stats.completedResponses, 1);
   assert.equal(stats.failedRequests, 0);
+  assert.equal(stats.inFlight, 0);
   assert.equal(stats.cachedInputTokens, 64);
 });

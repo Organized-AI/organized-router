@@ -40,26 +40,64 @@ Repeat the request to see `X-Organized-Cache: hit`. Response bodies retain provi
 
 ## Connect Codex with your ChatGPT subscription
 
+The persistent connector requires Python 3.14+ (including stdlib zstd), Codex and
+`lsof`. Native compatibility was verified with Codex 0.154.0. On macOS:
+
 ```sh
 codex login                      # Choose ChatGPT, if not already signed in.
-npm run router:subscription       # Keep this terminal running.
-# In another terminal in this repository:
-npm run codex:local
-npm run router:status             # Metadata and reported cache tokens only.
+npm run router -- service install
+npm run router -- configure codex --mode subscription --dry-run
+# Close Codex desktop and all CLI sessions before this command:
+npm run router -- configure codex --mode subscription
+# Reopen Codex, then inspect:
+npm run router -- status          # Saved default and ownership receipt.
+npm run router -- service status  # Background process and readiness.
+npm run router:status             # Observed cache tokens, no prompt payloads.
 ```
 
-The HTTP flow is Codex CLI → `http://127.0.0.1:8788` →
+The HTTP flow is Codex CLI/desktop → `http://127.0.0.1:8788/v1` →
 `https://chatgpt.com/backend-api/codex`. HTTP API transport does not require
-separate provider API billing. The launcher configures `requires_openai_auth=true`
+separate provider API billing. The connector configures `requires_openai_auth=true`
 and `forced_login_method="chatgpt"`; Codex owns login and token refresh. No OpenAI
 API key is requested. The proxy forwards the native bearer and account header only
 to the fixed ChatGPT host and has no provider fallback. Plan limits and upstream
 quota responses remain in effect.
 
-The launcher keeps the model from your Codex settings, applies provider overrides
-only to the child process, and uses HTTP streaming instead of WebSockets. It does
-not edit global Codex settings or reroute an already-running desktop chat.
-Additional CLI arguments work, for example `npm run codex:local -- --cd /path/to/project`.
+Setup validates the selected model against a native catalog before writing.
+It sets the saved `organized-router` provider, uses HTTP streaming, preserves
+unrelated settings and native model instructions, and writes private artifacts
+plus `organized-router-state.json` in your Codex home. Like Ramp's connector, it
+migrates provider metadata in live/archived/compressed transcripts and the SQLite
+index so conversations remain visible. Prompt and response content is preserved.
+The writer check refuses this operation while Codex has transcripts open. Exit
+Codex before configure/refresh/unconfigure and reopen it afterward.
+
+Subscription catalog discovery currently reads the access token from Codex's
+existing file-backed `auth.json` in memory. It does not copy, persist or refresh
+that token. OS-keyring-only authentication is not supported by this discovery
+step. If the token is expired, refresh through a normal Codex session or
+`codex login` before retrying. Inference authentication and refresh remain owned
+by native Codex.
+
+```sh
+npm run router -- refresh codex
+codex --profile organized-original       # Saved original-provider escape profile.
+npm run router -- unconfigure codex      # Restore settings/history; keep service.
+npm run router -- service uninstall      # Remove service after disconnecting.
+```
+
+Refresh preserves the current model; use `--model` to explicitly select another
+available model. Undo reclaims conversations created while connected and preserves
+unrelated later settings. Modified managed artifacts/providers stop the operation
+for review. An interrupted installation keeps its recovery receipt; use
+unconfigure before attempting setup again.
+
+The service runs at login and restarts after exit. Its private logs are under
+`.local/`; they contain process status only. `service restart` requires a verified
+idle router. Other operating systems can keep `npm run router:subscription`
+running under their own service manager. For an optional child-process-only
+connection, use `npm run codex:local -- --cd /path/to/project`; that wrapper does
+not change the desktop default.
 
 Coding requests retain their body bytes, tool schemas, cache keys, session and
 turn headers. Provider-native prompt caching remains available; the proxy neither
@@ -85,11 +123,35 @@ was live-tested with Codex CLI 0.154.0; future backend changes may require updat
 ## Optional provider API connection
 
 The separate Worker gateway remains available for explicitly configured provider
-API keys. Start it with `npm run dev`, then use `npm run codex:api` and
-`npm run router:api-status`. That mode uses provider API billing and port 8787;
-it is not needed for the subscription connection above. Its Codex launcher selects
-the configured Responses alias, assigns session affinity, and disables exact
-response reuse for coding sessions.
+API keys. Configure `.dev.vars` as above, then prepare Codex metadata and start it:
+
+```sh
+npm run router:catalog
+npm run dev
+# In another terminal, after closing Codex:
+npm run router -- configure codex --mode api --model YOUR_CONFIGURED_ALIAS
+```
+
+Catalog preparation uses the installed Codex bundle as a capability template.
+Each alias must map to one known native model and support Responses on every
+candidate. Unknown or mixed-model aliases require separately verified capability
+metadata; setup does not invent a Codex harness. The Worker returns a native
+catalog for authenticated requests with `X-Gateway-Client: codex` and the usual
+OpenAI model list for other clients. Deployments must also supply `CODEX_CATALOG`.
+
+API mode uses Ramp's `/bin/cat` command-auth pattern with a private gateway-key
+file, disables exact response replay for coding, and preserves native agent
+instructions. For another Organized Router host, specify `--api-base-url` and
+`--api-key-file`; HTTPS is required outside loopback. Refresh reuses the saved key
+for the same connection. Switching back is
+`npm run router -- configure codex --mode subscription`.
+
+This mode uses separately billed provider API credentials. It never receives
+subscription OAuth or acts as an automatic subscription fallback. Native API
+connection tests use dummy providers and incur no inference charges. The optional
+process-only wrapper `npm run codex:api` and `npm run router:api-status` remain
+available. The macOS service manages the subscription proxy; API Worker hosting
+is managed separately.
 
 ## Three distinct mechanisms
 

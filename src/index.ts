@@ -3,6 +3,7 @@ import { DurableStore } from './cache/store';
 import { ENDPOINTS, parseConfig } from './router/config';
 import { error, RouterEngine } from './router/engine';
 import type { Endpoint } from './router/types';
+import { createTelemetry, type Telemetry } from './telemetry/telemetry.mjs';
 export { HealerBreaker } from './do/HealerBreaker';
 
 export interface Env {
@@ -11,20 +12,33 @@ export interface Env {
   GATE_API_KEY?: string;
   PROVIDER_KEYS?: string;
   ROUTER_CONFIG?: string;
+  CODEX_CATALOG?: string;
   LOCAL_MODE?: string;
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  OTEL_EXPORTER_OTLP_HEADERS?: string;
+  OTEL_EXPORTER_OTLP_PROTOCOL?: string;
+  OTEL_TRACES_SAMPLER_ARG?: string;
+  OTEL_CAPTURE_CONSOLE?: string;
 }
 export class RouterCache {
   private store: DurableStore;
   private engine: RouterEngine;
+  private telemetry: Telemetry;
   constructor(private state: DurableObjectState, env: Env) {
     this.store = new DurableStore(state.storage);
+    this.telemetry = createTelemetry({ serviceName: 'organized-router-api', mode: 'api', env: {
+      OTEL_EXPORTER_OTLP_ENDPOINT: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_HEADERS: env.OTEL_EXPORTER_OTLP_HEADERS,
+      OTEL_EXPORTER_OTLP_PROTOCOL: env.OTEL_EXPORTER_OTLP_PROTOCOL,
+      OTEL_TRACES_SAMPLER_ARG: env.OTEL_TRACES_SAMPLER_ARG,
+    }, capture: env.OTEL_CAPTURE_CONSOLE === 'false' ? undefined : (signal, payload) => console.log(JSON.stringify({ signal, payload })) });
     this.engine = new RouterEngine(this.store, parseConfig(env.ROUTER_CONFIG, env.LOCAL_MODE === 'true'),
-      JSON.parse(env.PROVIDER_KEYS ?? '{}'));
+      JSON.parse(env.PROVIDER_KEYS ?? '{}'), undefined, undefined, this.telemetry);
   }
   alarm(): Promise<void> { return this.store.sweep(); }
   async fetch(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (path === '/api/cache/stats') return Response.json({ ...await this.store.stats(), ...await this.store.inventory() }, { headers: { 'cache-control': 'no-store' } });
+    if (path === '/api/cache/stats') return Response.json({ ...await this.store.stats(), ...await this.store.inventory(), telemetry: this.telemetry.stats }, { headers: { 'cache-control': 'no-store' } });
     if (path === '/api/cache' && request.method === 'DELETE') {
       await this.store.clear();
       return Response.json({ cleared: true }, { headers: { 'cache-control': 'no-store' } });
@@ -55,10 +69,18 @@ export default {
         allowed = user.routes as string[];
       }
       const config = parseConfig(env.ROUTER_CONFIG, env.LOCAL_MODE === 'true');
-      if (path === '/v1/models') return Response.json({ object: 'list', data: Object.entries(config.routes)
-        .filter(([id]) => allowed === null || allowed.includes(id))
-        .map(([id, candidates]) => ({ id, object: 'model', owned_by: 'organized-router',
+      if (path === '/v1/models') {
+        const routes = Object.entries(config.routes).filter(([id]) => allowed === null || allowed.includes(id));
+        if (request.headers.get('x-gateway-client') === 'codex') {
+          const catalog = object(JSON.parse(env.CODEX_CATALOG ?? '{}'));
+          if (!Array.isArray(catalog.models)) return error(503, 'Prepare the Codex model catalog before connecting this API gateway');
+          const visible = new Set(routes.filter(([, candidates]) => candidates.every(c => c.endpoints.includes('/v1/responses'))).map(([id]) => id));
+          const models = catalog.models.filter(m => typeof object(m).slug === 'string' && visible.has(object(m).slug as string));
+          return Response.json({ models }, { headers: { 'cache-control': 'no-store' } });
+        }
+        return Response.json({ object: 'list', data: routes.map(([id, candidates]) => ({ id, object: 'model', owned_by: 'organized-router',
           endpoints: [...new Set(candidates.flatMap(c => c.endpoints))] })) });
+      }
       if (ENDPOINTS.includes(path as Endpoint)) {
         // Authorization before any cache lookup. The clone is bounded in the engine too.
         const length = Number(request.headers.get('content-length'));

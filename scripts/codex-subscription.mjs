@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { subscriptionKey, subscriptionBaseUrl, root } from './subscription-connection.mjs';
+import { codexArguments } from './codex-arguments.mjs';
 
 try {
   const gatewayKey = await subscriptionKey();
@@ -16,8 +17,8 @@ try {
   };
   const args = Object.entries(options).flatMap(([key, value]) => ['-c', key + '=' + JSON.stringify(value)]);
   args.push('-c', 'model_providers.organized_subscription.env_http_headers={"x-organized-gateway-key"="ORGANIZED_SUBSCRIPTION_KEY"}');
-  args.push('--cd', root, ...process.argv.slice(2));
-  const child = spawn('codex', args, { stdio: 'inherit', env: { ...process.env, ORGANIZED_SUBSCRIPTION_KEY: gatewayKey } });
+  const child = spawn('codex', codexArguments(process.argv.slice(2), args, ['--cd', root]),
+    { stdio: 'inherit', env: { ...process.env, ORGANIZED_SUBSCRIPTION_KEY: gatewayKey } });
   child.on('error', () => { process.stderr.write('Could not launch Codex CLI.\n'); process.exitCode = 1; });
   child.on('exit', code => { process.exitCode = code ?? 1; });
 } catch {

@@ -5,6 +5,9 @@
   "license": "MIT",
   "description": "Self-hosted LLM gateway with provider cache affinity, opt-in exact response caching, and cache usage receipts.",
   "type": "module",
+  "bin": {
+    "organized-router": "scripts/organized-router.mjs"
+  },
   "scripts": {
     "dev": "wrangler dev --config wrangler.toml",
     "deploy": "wrangler deploy --config wrangler.toml",
@@ -18,7 +21,17 @@
     "router:subscription": "node scripts/subscription-server.mjs",
     "router:status": "node scripts/subscription-status.mjs",
     "router:api-status": "node scripts/local-status.mjs",
-    "test:subscription": "node --test tests/subscription.runtime.mjs"
+    "test:subscription": "node --test tests/subscription.runtime.mjs",
+    "router": "node scripts/organized-router.mjs",
+    "router:catalog": "python3 scripts/connection/catalog.py",
+    "test:connection": "python3 -m unittest discover -s tests -p 'connection_test.py' -v",
+    "test:connection-runtime": "node scripts/runtime-test.mjs --codex",
+    "test:telemetry": "node --test tests/telemetry.runtime.mjs",
+    "telemetry:status": "node scripts/telemetry-status.mjs",
+    "telemetry:configure": "python3 scripts/connection/telemetry.py",
+    "usage": "node scripts/usage-status.mjs",
+    "usage:live": "node scripts/usage-status.mjs --watch",
+    "test:usage": "node --test tests/usage.runtime.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260917.1",
@@ -28,5 +41,13 @@
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/otlp-transformer": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "ccusage": "20.0.21"
   }
 }

@@ -1,0 +1,10 @@
+{
+  "verifiedAt": "2026-09-17T13:39:15.601Z",
+  "environment": "real workerd and local OTLP HTTP receiver fixture",
+  "requestSpans": 167,
+  "upstreamSpans": 155,
+  "correlatedLogs": 167,
+  "payloadRedaction": true,
+  "replayHasZeroInferenceTokens": true,
+  "upstreamTraceContext": true
+}
