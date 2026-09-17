@@ -1,0 +1,28 @@
+{
+  "timeoutMs": 60000,
+  "responseTtlSeconds": 300,
+  "maxEntries": 128,
+  "maxEntryBytes": 64000,
+  "routes": {
+    "organized-openai": [
+      {
+        "id": "openai-primary",
+        "provider": "openai",
+        "model": "REPLACE_WITH_YOUR_OPENAI_MODEL",
+        "baseUrl": "https://api.openai.com",
+        "protocol": "openai",
+        "endpoints": ["/v1/responses", "/v1/chat/completions"]
+      }
+    ],
+    "organized-claude": [
+      {
+        "id": "anthropic-primary",
+        "provider": "anthropic",
+        "model": "REPLACE_WITH_YOUR_ANTHROPIC_MODEL",
+        "baseUrl": "https://api.anthropic.com",
+        "protocol": "anthropic",
+        "endpoints": ["/v1/messages"]
+      }
+    ]
+  }
+}
