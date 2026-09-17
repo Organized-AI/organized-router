@@ -12,7 +12,9 @@
     "test": "vitest run",
     "build": "wrangler deploy --config wrangler.toml --dry-run --outdir dist",
     "verify": "npm run typecheck && npm test && npm run build",
-    "test:runtime": "node scripts/runtime-test.mjs"
+    "test:runtime": "node scripts/runtime-test.mjs",
+    "codex:local": "node scripts/codex-local.mjs",
+    "router:status": "node scripts/local-status.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260917.1",

@@ -38,6 +38,22 @@ curl http://localhost:8787/v1/responses \
 
 Repeat the request to see `X-Organized-Cache: hit`. Response bodies retain provider IDs and historical usage exactly; `X-Organized-Upstream-Attempts: 0` and the gateway receipt distinguish a replay from new inference. Do not sum historical usage from replayed response bodies as new provider consumption.
 
+## Connect Codex locally
+
+Start the gateway with `npm run dev` and populate its provider keys in `.dev.vars`.
+Then run `npm run codex:local` to launch Codex through `http://127.0.0.1:8787/v1`.
+The launcher chooses the configured Responses alias, passes the private gateway key
+through an environment variable, disables WebSocket transport, and assigns a stable
+session ID for affinity. It leaves exact-response caching off for coding sessions.
+Use `npm run router:status` to check the local endpoint and cache counters without
+printing either credential. The launcher does not change global Codex settings or
+replace an existing ChatGPT login; the launched session uses provider API billing.
+It does not move an already-running chat onto the gateway.
+
+Codex provider configuration and authentication are documented in the
+[official configuration guide](https://learn.chatgpt.com/docs/config-file/config-advanced)
+and [authentication guide](https://learn.chatgpt.com/docs/auth).
+
 ## Three distinct mechanisms
 
 | Mechanism | Behavior |
