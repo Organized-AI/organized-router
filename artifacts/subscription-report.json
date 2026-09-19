@@ -1,0 +1,31 @@
+{
+  "verifiedAt": "2026-09-17T05:10:10Z",
+  "codexVersion": "0.154.0",
+  "mode": "chatgpt-subscription",
+  "model": "gpt-6-astra",
+  "localEndpoint": "http://127.0.0.1:8788",
+  "upstream": "https://chatgpt.com/backend-api/codex",
+  "providerApiKeyUsed": false,
+  "probe": "Ephemeral Codex CLI generation, with no tool use",
+  "expectedReplyReceived": true,
+  "routerObserved": {
+    "requests": 3,
+    "modelListRequests": 2,
+    "completedResponses": 1,
+    "failedRequests": 0,
+    "inputTokens": 17039,
+    "cachedInputTokens": 9088,
+    "outputTokens": 10
+  },
+  "codexReported": {
+    "inputTokens": 17039,
+    "cachedInputTokens": 9088,
+    "outputTokens": 10
+  },
+  "usageReconciled": true,
+  "limitations": [
+    "Observed native cache reuse is not proof of incremental savings caused by the proxy.",
+    "No subscription quota multiplier or dollar savings is inferred.",
+    "Existing desktop chat transport was not changed."
+  ]
+}

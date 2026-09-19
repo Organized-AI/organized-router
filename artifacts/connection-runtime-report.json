@@ -1,0 +1,14 @@
+{
+  "verifiedAt": "2026-09-17T13:39:11.079Z",
+  "environment": "native Codex, saved default config, real workerd, local provider fixture; no paid inference",
+  "cliDefaultProvider": "organized-router",
+  "appServerDefaultProvider": "organized-router",
+  "modelListed": "test",
+  "commandAuthentication": true,
+  "providerOverridesUsed": false,
+  "inputTokens": 1000,
+  "cachedInputTokens": 800,
+  "outputTokens": 10,
+  "nativeHistoryVisible": true,
+  "nativeHistoryVisibleAfterUnconfigure": true
+}

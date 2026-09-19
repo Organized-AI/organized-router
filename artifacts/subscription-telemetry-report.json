@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-09-17T13:39:08.375647+00:00",
+  "environment": "live Codex CLI through local subscription service; existing native ChatGPT login",
+  "providerOverridesUsed": true,
+  "persistentDefaultActivated": false,
+  "apiKeyFallback": false,
+  "successfulReply": true,
+  "inferenceRequests": 1,
+  "usageReconciledAcrossCliProxyAndLogs": true,
+  "inputTokens": 18027,
+  "cachedInputTokens": 0,
+  "outputTokens": 10,
+  "traceId": "295d99e59c7ce9a5c2d786ef6896a06c",
+  "requestSpans": 1,
+  "upstreamSpans": 1,
+  "correlatedLogs": 1,
+  "localFilesOwnerOnly": true,
+  "probeContentExcluded": true,
+  "hostedExportConfigured": false,
+  "serviceRestartVerified": true,
+  "subscriptionQuotaSavingsInferred": false
+}
