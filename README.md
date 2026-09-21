@@ -41,6 +41,22 @@ latest Codex-reported limit snapshot. Router counters are displayed separately
 because the two sources overlap. No inference API key or pricing lookup is needed.
 See [live usage and its limits](DOCUMENTATION/LIVE-USAGE.md).
 
+## Optional Jev decisions
+
+Jev can record task-class and model recommendations alongside local Codex
+subscription requests. Shadow mode keeps your selected model and native stream
+intact. It uses a separate TypeSafe API key and sends a bounded excerpt of the
+latest user message to TypeSafe; the resulting Grafana records contain metadata
+only. Fresh installs leave it off.
+
+```sh
+npm run jev:configure -- --restart # Hidden key prompt; saves private local settings
+npm run jev:status                # Actual running state, cache and separate decision costs
+```
+
+See [Jev setup, privacy, limits and evaluation](DOCUMENTATION/JEV.md). This release
+records recommendations; it does not automatically substitute a coding model.
+
 ## Run
 
 ```sh
@@ -52,6 +68,7 @@ npm run test:connection
 npm run test:connection-runtime
 npm run test:telemetry
 npm run test:usage
+npm run test:jev
 ```
 
 The runtime suite starts workerd and a local HTTP model fixture, tests all three API protocols, persistence, concurrency, expiry and purge, then shuts down. It makes no paid model calls. Requires Node 22.12+.
@@ -79,6 +96,7 @@ See [the configuration and API guide](DOCUMENTATION/CACHING.md) for requests, au
 - Per-key cache statistics and request receipts separating new inference from replayed usage.
 - Correlated OpenTelemetry logs/traces, private rotating local capture, and configurable OTLP export.
 - Live local Codex usage via ccusage, reported subscription limits, and separate router counters.
+- Optional Jev shadow decisions with bounded inputs, cached recommendations, and correlated OTel metadata.
 - Explicit cache read/write pricing, negative write overhead, and unknown-cost handling.
 
 Response reuse requires `X-Organized-Cache: exact`, `temperature: 0`, and `store: false` for Responses. Tools, stateful requests and streams bypass it. Provider prompt caching is independent and remains available on those paths.

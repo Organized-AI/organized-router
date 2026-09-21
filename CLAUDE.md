@@ -12,6 +12,7 @@ Cloudflare Workers/TypeScript gateway. Current work is the caching track in
 - `npm run test:connection-runtime`: saved configuration in native Codex CLI/app-server against a real Worker and dummy upstream.
 - `npm run test:telemetry`: actual OTel SDKs, local capture, OTLP transport and collector failure behavior.
 - `npm run test:usage`: pinned ccusage parser, quota freshness/privacy, authenticated polling, and native CLI argument regression.
+- `npm run test:jev`: official Jev SDK, private setup, bounded shadow decisions, metadata privacy and unchanged subscription streaming.
 - `npm audit`: dependency advisories.
 - `git diff --check`: patch formatting.
 
@@ -31,6 +32,7 @@ Cloudflare Workers/TypeScript gateway. Current work is the caching track in
 - Preserve user edits during setup rollback as well as during unconfigure. Retain a recovery receipt when rollback is incomplete.
 - Telemetry uses an attribute allowlist. Never emit payloads, credentials, account IDs, raw sessions, or arbitrary URLs. Collector outages must not break inference.
 - ccusage inputTokens excludes cached input; normalize before comparing with native/router usage. Local and router counts overlap and must not be added. Codex-reported quota is separate from token counts and API-equivalent prices.
+- Jev is opt-in shadow observation only. Never apply a classifier recommendation to a subscription request. TypeSafe receives only the configured bounded task excerpt, never native auth or tool/history payloads. Keep its usage and costs separate from Codex; disable SDK payload logging and retries.
 
 ## Local lessons
 

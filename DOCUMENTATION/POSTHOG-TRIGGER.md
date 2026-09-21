@@ -14,6 +14,13 @@ General roadmap/research text, this document, fixture traffic and request volume
 alone do not satisfy the trigger. Current HTTP success and token counts cannot
 establish coding-task success. Record the evidence that satisfies the condition.
 
+On 2026-09-21 the user requested enabling the Jev shadow design. Its concrete
+comparison is documented in [JEV.md](JEV.md): `jev-shadow-v1` recommendations
+versus the unchanged `codex-selected-model-v1` baseline. Treat it as ready only
+after the TypeSafe credential and live decision path are verified. Until then,
+the fixture tests, saved settings and synthetic probe are setup evidence, not
+an active experiment or task-outcome data.
+
 When triggered, implement an optional PostHog integration that connects outcome
 events with policy versions, models and trace identifiers. Keep Grafana as the
 primary operational backend, preserve native Codex subscription inference, and

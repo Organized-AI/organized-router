@@ -53,7 +53,7 @@ export class SubscriptionUsage {
 }
 
 // requestUpstream is an explicit test seam. The production runner never supplies it.
-export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.request, telemetry, usageMonitor }) {
+export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.request, telemetry, usageMonitor, decisions }) {
   if (!gatewayKey || gatewayKey.length < 32) throw new Error('A private local gateway key is required.');
   const expected = Buffer.from(gatewayKey);
   const stats = { mode: 'chatgpt-subscription', startedAt: new Date().toISOString(), upstream: subscriptionOrigin + '/backend-api/codex',
@@ -72,13 +72,14 @@ export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.re
     const nativeUrl = req.url.startsWith('/v1/') ? req.url.slice(3) : req.url;
     const path = nativeUrl.split('?')[0];
     // Exclude polling endpoints; never put arbitrary URL/query text in telemetry.
-    if (!['/api/cache/stats', '/api/usage'].includes(path)) span = telemetry?.start('router.request', req.headers.traceparent, {
+    if (!['/api/cache/stats', '/api/usage', '/api/decisions'].includes(path)) span = telemetry?.start('router.request', req.headers.traceparent, {
       'http.request.method': ['GET', 'POST'].includes(req.method) ? req.method : 'OTHER',
       'http.route': allowed.has(req.method + ' ' + path) ? path : 'unmatched',
     });
     const provided = Buffer.from(req.headers['x-organized-gateway-key'] ?? '');
     if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return json(401, { error: 'Local gateway authentication required.' });
-    if (req.method === 'GET' && req.url === '/api/cache/stats') return json(200, { ...stats, telemetry: telemetry?.stats });
+    if (req.method === 'GET' && req.url === '/api/cache/stats') return json(200, { ...stats, telemetry: telemetry?.stats, decisions: decisions?.stats });
+    if (req.method === 'GET' && req.url === '/api/decisions') return json(200, decisions?.stats ?? { mode: 'off', active: false });
     if (req.method === 'GET' && req.url === '/api/usage') return json(200, {
       ...(usageMonitor?.snapshot() ?? {status: 'disabled', sampledAt: null, codex: null, quota: null, errors: []}),
       router: { startedAt: stats.startedAt, requests: stats.requests, completedResponses: stats.completedResponses,
@@ -162,6 +163,16 @@ export function createSubscriptionProxy({ gatewayKey, requestUpstream = https.re
       req.on('error', fail);
       req.on('aborted', fail);
       res.on('close', () => { if (!res.writableFinished) { record(true); upstreamResponse?.destroy(); upstream.destroy(); } });
+      if (decisions && path === '/responses' && (!req.headers['content-encoding'] || req.headers['content-encoding'] === 'identity')) {
+        const capture = decisions.capture({ traceparent: span?.traceparent,
+          partition: decisions.partition(req.headers['chatgpt-account-id'], req.headers.session_id) });
+        if (capture) {
+          req.on('data', chunk => capture.push(chunk));
+          req.on('end', () => capture.end());
+          req.on('aborted', () => capture.cancel());
+          req.on('error', () => capture.cancel());
+        }
+      }
       req.pipe(upstream);
     } catch { fail(); }
   });

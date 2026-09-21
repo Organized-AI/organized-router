@@ -1,0 +1,41 @@
+{
+  "verifiedOn": "2026-09-21",
+  "policy": "jev-shadow-v1",
+  "model": "jev-1.13.0",
+  "sdk": "@typesafe-ai/sdk@0.6.0",
+  "verification": {
+    "typecheck": "passed",
+    "workerBuildDryRun": "passed",
+    "coreTests": 72,
+    "jevRuntimeTests": 12,
+    "jevConfigurationTests": 3,
+    "subscriptionTests": 6,
+    "telemetryTests": 7,
+    "usageTests": 7,
+    "connectionTests": 22,
+    "totalPassed": 129,
+    "dependencyAuditVulnerabilities": 0,
+    "patchWhitespace": "passed",
+    "inferenceCallsInTests": 0
+  },
+  "localActivation": {
+    "serviceRestartedWhileIdle": true,
+    "serviceReady": true,
+    "subscriptionMode": "chatgpt-subscription",
+    "completedNativeResponsesObservedAfterRestart": 5,
+    "failedNativeRequestsObservedAfterRestart": 0,
+    "jevMode": "shadow",
+    "jevActive": false,
+    "jevKeyConfigured": false,
+    "configurationError": false,
+    "liveJevCalls": 0,
+    "remainingStep": "Configure a private TypeSafe API key, restart while idle, then verify the live classifier and Grafana delivery."
+  },
+  "limits": {
+    "automaticModelSubstitution": false,
+    "cloudflareApiRouterJevIntegration": false,
+    "liveJevQualityMeasured": false,
+    "hostedJevTelemetryVerified": false,
+    "posthogExperimentReady": false
+  }
+}

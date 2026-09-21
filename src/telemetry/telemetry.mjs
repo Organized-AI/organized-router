@@ -12,7 +12,12 @@ const allowed = new Set(['http.request.method', 'http.route', 'http.response.sta
   'organized.cache.result', 'organized.cache.affinity', 'organized.upstream.attempt', 'organized.upstream.attempts',
   'organized.request.id', 'organized.route', 'organized.candidate', 'organized.usage.known', 'organized.duration_ms',
   'organized.usage.source', 'organized.usage.date', 'organized.usage.input_tokens', 'organized.usage.output_tokens',
-  'organized.usage.cached_input_tokens', 'organized.usage.total_tokens']);
+  'organized.usage.cached_input_tokens', 'organized.usage.total_tokens',
+  'organized.decision.policy', 'organized.decision.baseline', 'organized.decision.mode', 'organized.decision.source',
+  'organized.decision.input_chars', 'organized.decision.truncated', 'organized.decision.status', 'organized.decision.class',
+  'organized.decision.confidence', 'organized.decision.recommended_model', 'organized.decision.served_model',
+  'organized.decision.reason', 'organized.decision.cache', 'organized.decision.applied', 'organized.decision.disagrees',
+  'organized.decision.usage_known', 'organized.decision.estimated_cost_usd']);
 function attributes(values = {}) {
   return Object.fromEntries(Object.entries(values).filter(([key, value]) => allowed.has(key) &&
     (typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number' && Number.isFinite(value)))
@@ -106,7 +111,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
   let flushing;
   Object.defineProperty(stats, 'pendingBatches', { enumerable: true, get: () => pending.size });
   Object.defineProperty(stats, 'flushing', { enumerable: true, get: () => Boolean(flushing) });
-  const begin = (name, parent = ROOT_CONTEXT, values = {}, kind = SpanKind.SERVER) => {
+  const begin = (name, parent = ROOT_CONTEXT, values = {}, kind = SpanKind.SERVER, logOnEnd = kind === SpanKind.SERVER) => {
     const started = Date.now();
     const span = tracer.startSpan(name, { kind, attributes: attributes(values) }, parent);
     const ctx = trace.setSpan(parent, span);
@@ -123,7 +128,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
         const fields = attributes({ ...values, ...finalValues, 'organized.duration_ms': Math.max(0, Date.now() - started) });
         span.setAttributes(fields);
         if (failed) span.setStatus({ code: SpanStatusCode.ERROR });
-        if (kind === SpanKind.SERVER) logger.emit({ context: ctx, severityNumber: failed ? 17 : 9, severityText: failed ? 'ERROR' : 'INFO',
+        if (logOnEnd) logger.emit({ context: ctx, severityNumber: failed ? 17 : 9, severityText: failed ? 'ERROR' : 'INFO',
           body: name + '.completed', attributes: fields });
         span.end();
       },
@@ -136,6 +141,7 @@ export function createTelemetry({ serviceName, mode, env = {}, capture, fetcher 
       logger.emit({ severityNumber: 9, severityText: 'INFO', body: 'organized.usage.snapshot', attributes: attributes(values) });
     },
     start: (name, traceparent, values) => begin(name, parentContext(traceparent), values),
+    decision: (traceparent, values) => begin('organized.decision', parentContext(traceparent), values, SpanKind.INTERNAL, true),
     flush() {
       if (!flushing) flushing = (async () => {
         let observed;

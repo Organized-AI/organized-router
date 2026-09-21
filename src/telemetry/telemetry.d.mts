@@ -9,6 +9,7 @@ export interface RouterSpan {
 export interface Telemetry {
   stats: { localBatches: number; exportedBatches: number; exportFailures: number; captureFailures: number; configurationError: boolean };
   start(name: string, traceparent?: string | null, values?: Fields): RouterSpan;
+  decision(traceparent?: string | null, values?: Fields): RouterSpan;
   flush(): Promise<void>;
   shutdown(): Promise<void>;
 }

@@ -1,0 +1,14 @@
+{
+  "mode": "off",
+  "model": "jev-1.13.0",
+  "timeoutMs": 1500,
+  "maxInputChars": 2000,
+  "maxCallsPerHour": 120,
+  "cacheTtlMs": 600000,
+  "confidenceThreshold": 0.8,
+  "models": {
+    "routine": "gpt-5.6-luna",
+    "standard": "gpt-5.6-terra",
+    "complex": "gpt-6-astra"
+  }
+}

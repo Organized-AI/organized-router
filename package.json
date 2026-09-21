@@ -31,7 +31,11 @@
     "telemetry:configure": "python3 scripts/connection/telemetry.py",
     "usage": "node scripts/usage-status.mjs",
     "usage:live": "node scripts/usage-status.mjs --watch",
-    "test:usage": "node --test tests/usage.runtime.mjs"
+    "test:usage": "node --test tests/usage.runtime.mjs",
+    "test:jev": "node --test tests/jev.runtime.mjs && python3 -m unittest discover -s tests -p 'jev_test.py' -v",
+    "jev:configure": "python3 scripts/connection/jev.py",
+    "jev:status": "node scripts/jev-status.mjs",
+    "jev:probe": "node scripts/jev-status.mjs --probe"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260917.1",
@@ -48,6 +52,7 @@
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@typesafe-ai/sdk": "0.6.0",
     "ccusage": "20.0.21"
   }
 }
