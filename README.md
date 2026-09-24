@@ -107,3 +107,7 @@ settings. [Connection details and current status](DOCUMENTATION/OBSERVABILITY.md
 The [cache implementation plan](PLANNING/CACHE-FIRST-PLAN.md) defines the verified track. The [original product vision](DOCUMENTATION/ORIGINAL-PRODUCT-VISION.md) and [historical master plan](PLANNING/IMPLEMENTATION-MASTER-PLAN.md) describe future healing, billing, classifier and public-catalog work. Existing experimental repair/savings modules remain in the tree but are not activated by the caching gateway.
 
 This is a runnable gateway, not a production deployment or a measured savings claim. [Current operational limits](DOCUMENTATION/CACHING.md#current-limits) are documented. Self-hosting uses `wrangler.toml`; no cloud resources are created by tests.
+
+---
+
+Maintained by Jordaaan Hill ([LinkedIn](https://www.linkedin.com/in/jordaaanhill)).
